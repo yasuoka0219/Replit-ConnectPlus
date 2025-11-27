@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}{% if invoice %}請求編集{% else %}請求作成{% endif %} - CONNECT+{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">{% if invoice %}請求編集{% else %}請求作成{% endif %}</h1>
+    <p class="text-gray-600 dark:text-gray-400">請求情報を入力してください</p>
+</div>
+
+<form id="invoiceForm" class="space-y-6">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">基本情報</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">企業 <span class="text-red-500">*</span></label>
+                <select id="company_id" required class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <option value="">選択してください</option>
+                    {% for company in companies %}
+                    <option value="{{ company.id }}" {% if invoice and invoice.company_id == company.id %}selected{% endif %}>{{ company.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">担当者</label>
+                <select id="contact_id" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <option value="">選択してください</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">発行日 <span class="text-red-500">*</span></label>
+                <input type="date" id="issue_date" required value="{% if invoice %}{{ invoice.issue_date.strftime('%Y-%m-%d') }}{% else %}{{ today }}{% endif %}" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">支払期限</label>
+                <input type="date" id="due_date" value="{% if invoice and invoice.due_date %}{{ invoice.due_date.strftime('%Y-%m-%d') }}{% endif %}" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+            <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">件名 <span class="text-red-500">*</span></label>
+                <input type="text" id="subject" required value="{% if invoice %}{{ invoice.subject }}{% endif %}" placeholder="例: 10月分業務委託費" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">担当者</label>
+                <input type="text" id="person_in_charge" value="{% if invoice and invoice.person_in_charge %}{{ invoice.person_in_charge }}{% endif %}" placeholder="例: 山田太郎" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">消費税率 (%)</label>
+                <input type="number" id="tax_rate" step="0.01" value="{% if invoice %}{{ (invoice.tax_rate * 100)|int }}{% else %}10{% endif %}" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">明細</h2>
+            <button type="button" onclick="addItem()" class="px-4 py-2 bg-primary hover:bg-indigo-700 text-white rounded-lg">+ 行追加</button>
+        </div>
+        <div id="items" class="space-y-4">
+        </div>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">備考</label>
+        <textarea id="notes" rows="4" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="振込先情報、お支払い条件など">{% if invoice %}{{ invoice.notes }}{% endif %}</textarea>
+    </div>
+
+    <div class="flex gap-4">
+        <button type="submit" class="px-6 py-3 bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg">保存</button>
+        <a href="{{ url_for('invoices') }}" class="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg">キャンセル</a>
+    </div>
+</form>
+
+<script>
+let itemIndex = 0;
+const invoiceId = {% if invoice %}{{ invoice.id }}{% else %}null{% endif %};
+
+function addItem(data = {}) {
+    const itemHtml = `
+        <div class="grid grid-cols-12 gap-2 items-start p-4 border border-gray-200 dark:border-gray-600 rounded-lg" data-index="${itemIndex}">
+            <div class="col-span-3">
+                <input type="text" class="item-name w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm" placeholder="品目名" value="${data.item_name || ''}" required>
+            </div>
+            <div class="col-span-3">
+                <input type="text" class="item-desc w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm" placeholder="説明" value="${data.description || ''}">
+            </div>
+            <div class="col-span-2">
+                <input type="number" class="item-qty w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm" placeholder="数量" value="${data.qty || 1}" step="0.01" required>
+            </div>
+            <div class="col-span-3">
+                <input type="number" class="item-price w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm" placeholder="単価" value="${data.unit_price || 0}" step="1" required>
+            </div>
+            <div class="col-span-1 flex items-center justify-center">
+                <button type="button" onclick="removeItem(${itemIndex})" class="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    `;
+    document.getElementById('items').insertAdjacentHTML('beforeend', itemHtml);
+    itemIndex++;
+}
+
+function removeItem(index) {
+    const item = document.querySelector(`[data-index="${index}"]`);
+    if (item) item.remove();
+}
+
+document.getElementById('invoiceForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const items = [];
+    document.querySelectorAll('#items > div').forEach(itemDiv => {
+        items.push({
+            item_name: itemDiv.querySelector('.item-name').value,
+            description: itemDiv.querySelector('.item-desc').value,
+            qty: parseFloat(itemDiv.querySelector('.item-qty').value),
+            unit_price: parseFloat(itemDiv.querySelector('.item-price').value),
+            tax_rate: parseFloat(document.getElementById('tax_rate').value) / 100
+        });
+    });
+    
+    if (items.length === 0) {
+        alert('明細を1つ以上追加してください');
+        return;
+    }
+    
+    const data = {
+        company_id: parseInt(document.getElementById('company_id').value),
+        contact_id: document.getElementById('contact_id').value || null,
+        issue_date: document.getElementById('issue_date').value,
+        due_date: document.getElementById('due_date').value || null,
+        subject: document.getElementById('subject').value,
+        person_in_charge: document.getElementById('person_in_charge').value || null,
+        tax_rate: parseFloat(document.getElementById('tax_rate').value) / 100,
+        notes: document.getElementById('notes').value,
+        items: items
+    };
+    
+    try {
+        const url = invoiceId ? `/api/invoices/${invoiceId}` : '/api/invoices';
+        const method = invoiceId ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            alert('保存しました');
+            window.location.href = '/invoices/' + result.id;
+        } else {
+            alert('エラー: ' + result.error);
+        }
+    } catch (error) {
+        alert('保存に失敗しました: ' + error.message);
+    }
+});
+
+{% if invoice %}
+{% for item in invoice.items %}
+addItem({
+    item_name: '{{ item.item_name }}',
+    description: '{{ item.description or "" }}',
+    qty: {{ item.qty }},
+    unit_price: {{ item.unit_price }}
+});
+{% endfor %}
+{% else %}
+addItem();
+{% endif %}
+
+const today = new Date().toISOString().split('T')[0];
+if (!invoiceId) {
+    document.getElementById('issue_date').value = today;
+}
+</script>
+{% endblock %}

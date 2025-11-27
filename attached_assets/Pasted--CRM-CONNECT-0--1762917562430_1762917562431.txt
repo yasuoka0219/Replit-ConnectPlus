@@ -1,0 +1,251 @@
+以下の要件で既存のCRMアプリ「CONNECT+」を安全に拡張してください。
+既存コードはなるべく活かし、破壊的変更は避けてください。作業ごとに動作確認可能な段階でコミットしてください。
+
+0) 前提・品質基準
+
+既存スタック：Flask（Python）＋SQLAlchemy＋Flask-Login＋TailwindCSS＋Chart.js。OpenAI等のAI連携は不要。
+
+DBは環境変数 DATABASE_URL を優先。未設定なら SQLite を自動使用（将来PostgreSQLへ容易に切替可能なORM設計）。
+
+例外処理／入力バリデーションを実装（400/404/500の適切なエラーハンドリング、CSRF保護、認可チェック）。
+
+変更は段階的実装＆差分追加で行う。既存機能は残す。
+
+フロントはレスポンシブ、アクセシビリティ（ラベル、キーボード操作）にも配慮。
+
+重要ポイントにはコメントを残す。型ヒントを使う（mypy互換）。
+
+すべての作業が完了したら、簡易テスト手順をREADMEに追記。
+
+1) ディレクトリ構成（目安）
+app/
+  __init__.py
+  models.py
+  schemas/          # pydantic風のレスポンス型定義 or marshmallow
+  routes/
+    companies.py
+    deals.py
+    tasks.py
+    dashboard.py
+    activities.py
+  services/
+    dashboard_service.py
+    deal_service.py
+  templates/
+    companies/
+      detail.html
+    dashboard.html
+  static/
+    css/ (Tailwind)
+    js/  (Chart.js用)
+migrations/         # 簡易マイグレーションスクリプト（ORMで代替でも可）
+config.py
+README.md
+
+
+既存構成がある場合は可能な限り合わせてください。
+
+2) DB拡張（マイグレーション）
+
+既存の users / companies / contacts / deals / tasks を拡張し、activities を新規作成。
+破壊的変更禁止（nullable追加やデフォルト値を活用）。
+
+2.1 companies（拡張）
+
+industry TEXT NULL
+
+employee_size INTEGER NULL
+
+hq_location TEXT NULL
+
+website TEXT NULL
+
+needs TEXT NULL
+
+kpi_current TEXT NULL
+
+heat_score INTEGER DEFAULT 1 CHECK(heat_score BETWEEN 1 AND 5)
+
+last_contacted_at DATETIME NULL
+
+next_action_at DATETIME NULL
+
+tags TEXT NULL（カンマ区切り。将来JSONへ移行可能）
+
+インデックス：(name), (heat_score)
+
+2.2 contacts（拡張）
+
+role TEXT NULL
+
+notes TEXT NULL
+
+2.3 deals（拡張）
+
+win_reason TEXT NULL
+
+lost_reason TEXT NULL
+
+stage_entered_at DATETIME NULL（作成時にstage変更と同時更新）
+
+インデックス：(status), (stage), (assignee)
+
+2.4 activities（新規）
+id (PK), company_id (FK), user_id (FK), deal_id (FK, NULL可),
+type TEXT CHECK(type IN ('call','meeting','email','note')) NOT NULL,
+title TEXT NOT NULL,
+body TEXT NULL,
+happened_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+
+
+インデックス：(company_id, happened_at DESC)
+
+マイグレーションは、既存データを保持しつつ追加。SQLiteの場合はテーブル再作成が必要なケースがあるため、安全なマイグレーション関数で対応。
+
+3) 会社詳細ページ（Company Detail）新設
+
+URL例：/companies/<int:company_id>
+
+3.1 UIレイアウト（Tailwind）
+
+grid grid-cols-12 gap-6
+
+左（col-span-3）：CompanyCard（基本情報・タグ編集・温度感表示）
+
+中央（col-span-6）：Tabs（案件 / 担当者 / 活動履歴 / ファイル(任意)）
+
+右（col-span-3）：次回アクション（Task作成）・リマインダー・熱度ピル
+
+3.2 表示項目
+
+会社：name / industry / employee_size / hq_location / website / needs / kpi_current / heat_score / tags / last_contacted_at / next_action_at
+
+案件タブ：title / stage / amount / status / days_in_stage（＝ NOW - stage_entered_at）
+
+担当者タブ：name / role / email / phone / notes
+
+活動履歴タブ：type / title / body / happened_at（新規追加フォーム付き）
+
+3.3 バックエンドAPI
+
+GET /api/companies/<id>：会社詳細＋要約情報
+
+PUT /api/companies/<id>：基本情報更新（バリデーション＆権限チェック）
+
+GET /api/companies/<id>/deals：会社の案件一覧
+
+GET /api/companies/<id>/contacts：担当者一覧
+
+GET /api/companies/<id>/activities?limit=20&offset=0：活動履歴
+
+POST /api/companies/<id>/activities：活動追加（type/title必須）
+
+POST /api/companies/<id>/tags：タグ追加・削除（単純な文字列配列を受理）
+
+注意：APIはJSONで返却。エラー時はJSONでメッセージとコードを返す。
+
+4) ダッシュボード（KPI）実装
+
+テンプレート：templates/dashboard.html
+API：routes/dashboard.py
+
+4.1 指標
+
+月次売上推移（status='WON' の amount 合計）
+
+ステージ別パイプライン金額（status='OPEN' の amount）
+
+担当者別受注率＝ WON / (WON + LOST)
+
+次回アクション未設定件数（OPEN案件で、未完了Taskが0件）
+
+ステージ滞留警告（days_in_stage > 閾値 の件数）
+
+4.2 API設計
+
+GET /api/dashboard/monthly_revenue?from=YYYY-MM-DD&to=YYYY-MM-DD
+
+GET /api/dashboard/pipeline_by_stage
+
+GET /api/dashboard/win_rate_by_owner
+
+GET /api/dashboard/no_next_action_count
+
+GET /api/dashboard/stale_deals?threshold_days=10
+
+4.3 Chart.js構成
+
+Line：月次売上
+
+Horizontal Bar：ステージ別パイプライン
+
+Bar：担当者別受注率（%表示）
+
+Stat Cards：pipeline_total / won_this_month / no_next_action / stale_deals
+
+フロント注意：データ取得失敗時はユーザに分かるトースト表示、グラフは空状態で描画。
+
+5) 案件一覧の使い勝手改善
+
+検索条件の保存（ローカルストレージでOK）
+
+滞留バッジ：days_in_stage > X で赤ピル表示
+
+温度感ピル：companies.heat_score に応じて色分け
+
+一括操作：チェックした案件のステージ一括更新 / タグ付け
+
+6) ステージ変更フック
+
+/api/deals/<id>/stage 更新時に stage_entered_at を現在時刻に更新
+
+トランザクション管理し、失敗時はロールバック。
+
+7) バリデーション・セキュリティ
+
+すべてのPOST/PUTでサーバ側バリデーション（必須項目・型・範囲）
+
+CSRF保護（フォーム or APIトークン）
+
+認証必須ルートは@login_required
+
+権限（自分の組織データのみ操作可）チェックの雛形
+
+8) サンプルデータ（シード）
+
+開発確認用に seed.py を追加：
+
+会社3件、担当者5件、案件8件、活動20件、タスク10件（期限・ステージをバラけさせる）
+
+READMEに python seed.py の実行方法を記載。
+
+9) 動作確認手順（README追記）
+
+pip install -r requirements.txt
+
+export DATABASE_URL=...（未設定ならSQLite）
+
+python app_init.py（テーブル作成・マイグレーション実行）
+
+python seed.py（任意）
+
+flask run で起動 → /dashboard と /companies/<id> を確認
+
+10) 期待する成果物
+
+拡張済みモデル・安全なマイグレーション
+
+**会社詳細ページ（Company Detail）**のUIとAPI
+
+KPIダッシュボード（最低：月次売上・ステージ別パイプライン・担当者別受注率・未設定次アクション数）
+
+案件一覧の滞留・温度感バッジ
+
+README更新（セットアップとテスト手順）
+
+最重要：既存機能を壊さないこと。コンソールにエラーを残さないこと。
+不明点があれば仮実装→TODOコメントを入れ、後続で直せる形にしてください。
+
+以上です。上記の順で、小さく安全に拡張してください。
+作業の各ステップ後、UIが表示され、APIが正しくJSONを返すことを確認してください。

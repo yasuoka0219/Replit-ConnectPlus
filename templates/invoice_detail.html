@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}請求詳細 - CONNECT+{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <div class="flex items-center justify-between mb-4">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">請求詳細</h1>
+            <p class="text-gray-600 dark:text-gray-400">請求書の詳細情報</p>
+        </div>
+        <div class="flex gap-2">
+            <a href="{{ url_for('invoices') }}" class="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg">戻る</a>
+            {% if invoice.status == '下書き' %}
+            <button onclick="issueInvoice({{ invoice.id }})" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg">発行する</button>
+            <a href="{{ url_for('edit_invoice', id=invoice.id) }}" class="px-4 py-2 bg-primary hover:bg-indigo-700 text-white rounded-lg">編集</a>
+            {% else %}
+            <a href="{{ url_for('download_invoice_pdf', id=invoice.id) }}" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg">PDF出力</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">基本情報</h2>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="text-sm font-medium text-gray-500 dark:text-gray-400">請求番号</label>
+                    <p class="text-gray-900 dark:text-white font-mono">{{ invoice.invoice_no or '未発行' }}</p>
+                </div>
+                <div>
+                    <label class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 block">ステータス</label>
+                    <div class="flex gap-2">
+                        <span id="currentStatus" class="px-3 py-1 text-xs font-medium rounded-full
+                            {% if invoice.status == '下書き' %}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200
+                            {% elif invoice.status == '発行済み' %}bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200
+                            {% elif invoice.status == '入金確認' %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200
+                            {% endif %}">
+                            {{ invoice.status }}
+                        </span>
+                        <div class="relative inline-block text-left">
+                            <button onclick="toggleStatusMenu()" class="px-3 py-1 text-xs bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded">
+                                変更
+                            </button>
+                            <div id="statusMenu" class="hidden absolute right-0 mt-2 w-32 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10">
+                                <button onclick="changeStatus('発行済み')" class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-t-lg">発行済み</button>
+                                <button onclick="changeStatus('入金確認')" class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-b-lg">入金確認</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-sm font-medium text-gray-500 dark:text-gray-400">企業名</label>
+                    <p class="text-gray-900 dark:text-white">
+                        <a href="{{ url_for('view_company', id=invoice.company.id) }}" class="text-primary hover:underline">
+                            {{ invoice.company.name }}
+                        </a>
+                    </p>
+                </div>
+                <div>
+                    <label class="text-sm font-medium text-gray-500 dark:text-gray-400">担当者（連絡先）</label>
+                    <p class="text-gray-900 dark:text-white">{{ invoice.contact.name if invoice.contact else '-' }}</p>
+                </div>
+                <div>
+                    <label class="text-sm font-medium text-gray-500 dark:text-gray-400">担当者</label>
+                    <p class="text-gray-900 dark:text-white">{{ invoice.person_in_charge if invoice.person_in_charge else '-' }}</p>
+                </div>
+                <div>
+                    <label class="text-sm font-medium text-gray-500 dark:text-gray-400">発行日</label>
+                    <p class="text-gray-900 dark:text-white">{{ invoice.issue_date.strftime('%Y年%m月%d日') }}</p>
+                </div>
+                <div>
+                    <label class="text-sm font-medium text-gray-500 dark:text-gray-400">支払期限</label>
+                    <p class="text-gray-900 dark:text-white">{{ invoice.due_date.strftime('%Y年%m月%d日') if invoice.due_date else '-' }}</p>
+                </div>
+                <div class="col-span-2">
+                    <label class="text-sm font-medium text-gray-500 dark:text-gray-400">件名</label>
+                    <p class="text-gray-900 dark:text-white">{{ invoice.subject }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">明細</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50 dark:bg-gray-700">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">品目</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">説明</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">数量</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">単価</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">小計</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                        {% for item in invoice.items %}
+                        <tr>
+                            <td class="px-4 py-3 text-gray-900 dark:text-white">{{ item.item_name }}</td>
+                            <td class="px-4 py-3 text-gray-700 dark:text-gray-300 text-sm">{{ item.description or '-' }}</td>
+                            <td class="px-4 py-3 text-right text-gray-900 dark:text-white">{{ item.qty }}</td>
+                            <td class="px-4 py-3 text-right text-gray-900 dark:text-white">¥{{ "{:,.0f}".format(item.unit_price) }}</td>
+                            <td class="px-4 py-3 text-right text-gray-900 dark:text-white font-medium">¥{{ "{:,.0f}".format(item.line_total) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {% if invoice.notes %}
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">備考</h2>
+            <p class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{{ invoice.notes }}</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="space-y-6">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">金額</h2>
+            <div class="space-y-3">
+                <div class="flex justify-between">
+                    <span class="text-gray-600 dark:text-gray-400">小計</span>
+                    <span class="text-gray-900 dark:text-white font-medium">¥{{ "{:,.0f}".format(invoice.subtotal) }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600 dark:text-gray-400">消費税 ({{ (invoice.tax_rate * 100)|int }}%)</span>
+                    <span class="text-gray-900 dark:text-white font-medium">¥{{ "{:,.0f}".format(invoice.tax_amount) }}</span>
+                </div>
+                <div class="pt-3 border-t border-gray-200 dark:border-gray-700">
+                    <div class="flex justify-between items-center">
+                        <span class="text-lg font-bold text-gray-900 dark:text-white">合計</span>
+                        <span class="text-2xl font-bold text-primary">¥{{ "{:,.0f}".format(invoice.total) }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleStatusMenu() {
+    const menu = document.getElementById('statusMenu');
+    menu.classList.toggle('hidden');
+}
+
+async function changeStatus(newStatus) {
+    const menu = document.getElementById('statusMenu');
+    menu.classList.add('hidden');
+    
+    if (!confirm(`ステータスを「${newStatus}」に変更しますか？`)) return;
+    
+    try {
+        const response = await fetch('/api/invoices/{{ invoice.id }}/status', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({ status: newStatus })
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            alert('ステータスを変更しました');
+            location.reload();
+        } else {
+            alert('エラー: ' + data.error);
+        }
+    } catch (error) {
+        alert('ステータスの変更に失敗しました: ' + error.message);
+    }
+}
+
+// Close menu when clicking outside
+document.addEventListener('click', function(event) {
+    const menu = document.getElementById('statusMenu');
+    const isClickInside = event.target.closest('.relative');
+    if (!isClickInside && menu && !menu.classList.contains('hidden')) {
+        menu.classList.add('hidden');
+    }
+});
+
+async function issueInvoice(id) {
+    if (!confirm('請求を発行しますか？発行後は編集できなくなります。')) return;
+    
+    try {
+        const response = await fetch(`/api/invoices/${id}/issue`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            alert(`請求番号 ${data.invoice_no} で発行しました`);
+            location.reload();
+        } else {
+            alert('エラー: ' + data.error);
+        }
+    } catch (error) {
+        alert('発行に失敗しました: ' + error.message);
+    }
+}
+</script>
+{% endblock %}

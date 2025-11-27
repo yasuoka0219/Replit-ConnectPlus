@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}タスク管理 - CONNECT+{% endblock %}
+
+{% block content %}
+<div class="mb-8 flex items-center justify-between">
+    <div>
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">タスク管理</h1>
+        <p class="text-gray-600 dark:text-gray-400">案件関連のタスクを管理</p>
+    </div>
+    <a href="{{ url_for('create_task') }}" class="px-6 py-3 bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-200">
+        + 新規タスク
+    </a>
+</div>
+
+<div class="mb-6">
+    <form method="GET" action="{{ url_for('tasks') }}" class="flex gap-4">
+        <input type="text" name="search" value="{{ search }}" placeholder="タスク名、案件名で検索..." 
+               class="flex-1 px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+        <select name="status" class="px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+            <option value="">全ステータス</option>
+            <option value="未着手" {% if status_filter == '未着手' %}selected{% endif %}>未着手</option>
+            <option value="進行中" {% if status_filter == '進行中' %}selected{% endif %}>進行中</option>
+            <option value="完了" {% if status_filter == '完了' %}selected{% endif %}>完了</option>
+        </select>
+        <button type="submit" class="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition duration-200">
+            検索
+        </button>
+    </form>
+</div>
+
+<div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+    <table class="w-full">
+        <thead class="bg-gray-50 dark:bg-gray-700">
+            <tr>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">タスク名</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">案件</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">担当者</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">期限</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">ステータス</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">操作</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+            {% if tasks %}
+                {% for task in tasks %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td class="px-6 py-4">
+                        <div class="font-medium text-gray-900 dark:text-white">{{ task.title }}</div>
+                    </td>
+                    <td class="px-6 py-4 text-gray-600 dark:text-gray-400">{{ task.deal.title if task.deal else (task.deal_name or '-') }}</td>
+                    <td class="px-6 py-4 text-gray-600 dark:text-gray-400">{{ task.assignee or '-' }}</td>
+                    <td class="px-6 py-4 text-gray-600 dark:text-gray-400">{{ task.due_date.strftime('%Y-%m-%d') if task.due_date else '-' }}</td>
+                    <td class="px-6 py-4">
+                        <span class="px-3 py-1 text-xs font-medium rounded-full
+                            {% if task.status == '完了' %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200
+                            {% elif task.status == '進行中' %}bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200
+                            {% else %}bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200{% endif %}">
+                            {{ task.status }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="flex gap-2">
+                            <a href="{{ url_for('edit_task', id=task.id) }}" class="px-3 py-1 text-sm bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded hover:bg-blue-200 dark:hover:bg-blue-800">
+                                編集
+                            </a>
+                            <form method="POST" action="{{ url_for('delete_task', id=task.id) }}" onsubmit="return confirm('本当に削除しますか？');" class="inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <button type="submit" class="px-3 py-1 text-sm bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 rounded hover:bg-red-200 dark:hover:bg-red-800">
+                                    削除
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="6" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        タスクが登録されていません
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

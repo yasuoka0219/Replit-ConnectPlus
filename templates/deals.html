@@ -1,0 +1,562 @@
+{% extends "base.html" %}
+
+{% block title %}案件管理 - CONNECT+{% endblock %}
+
+{% block content %}
+<div class="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+        <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">案件管理</h1>
+        <p class="text-sm sm:text-base text-gray-600 dark:text-gray-400">営業案件を管理</p>
+    </div>
+    <div class="flex flex-col sm:flex-row gap-3 sm:items-center">
+        {% if can_import_export %}
+        <div class="flex flex-wrap gap-2">
+            <a href="{{ url_for('export_deals', format='csv') }}{% if search or stage_filter or status_filter or assignee_filter or heat_score_filter or amount_min or amount_max or created_from or created_to or revenue_month %}?search={{ search }}&stage={{ stage_filter }}&status={{ status_filter }}&assignee={{ assignee_filter }}&heat_score={{ heat_score_filter }}&amount_min={{ amount_min }}&amount_max={{ amount_max }}&created_from={{ created_from }}&created_to={{ created_to }}&revenue_month={{ revenue_month }}{% endif %}" 
+               class="px-4 py-3 text-base text-center bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition duration-200">
+                CSV出力
+            </a>
+            <a href="{{ url_for('export_deals', format='excel') }}{% if search or stage_filter or status_filter or assignee_filter or heat_score_filter or amount_min or amount_max or created_from or created_to or revenue_month %}?search={{ search }}&stage={{ stage_filter }}&status={{ status_filter }}&assignee={{ assignee_filter }}&heat_score={{ heat_score_filter }}&amount_min={{ amount_min }}&amount_max={{ amount_max }}&created_from={{ created_from }}&created_to={{ created_to }}&revenue_month={{ revenue_month }}{% endif %}" 
+               class="px-4 py-3 text-base text-center bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition duration-200">
+                Excel出力
+            </a>
+            <a href="{{ url_for('import_deals') }}" 
+               class="px-4 py-3 text-base text-center bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition duration-200">
+                インポート
+            </a>
+        </div>
+        {% endif %}
+        <a href="{{ url_for('create_deal') }}" class="w-full sm:w-auto px-6 py-3 text-base text-center bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-200">
+            + 新規案件
+        </a>
+    </div>
+</div>
+
+<div class="mb-6">
+    <form method="GET" action="{{ url_for('deals') }}" id="dealFilterForm">
+        <!-- 基本検索・フィルタ -->
+        <div class="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4">
+            <input type="text" name="search" value="{{ search }}" placeholder="案件名、企業名で検索..." 
+                   class="flex-1 min-w-0 px-4 py-3 text-base rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+            <div class="flex flex-col sm:flex-row gap-3 sm:gap-2 flex-1 sm:flex-initial">
+                <select name="stage" class="flex-1 sm:flex-initial px-4 py-3 text-base rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <option value="">全ステージ</option>
+                    <option value="初回接触" {% if stage_filter == '初回接触' %}selected{% endif %}>初回接触</option>
+                    <option value="提案" {% if stage_filter == '提案' %}selected{% endif %}>提案</option>
+                    <option value="見積" {% if stage_filter == '見積' %}selected{% endif %}>見積</option>
+                    <option value="交渉" {% if stage_filter == '交渉' %}selected{% endif %}>交渉</option>
+                    <option value="成約" {% if stage_filter == '成約' %}selected{% endif %}>成約</option>
+                </select>
+                <select name="status" class="flex-1 sm:flex-initial px-4 py-3 text-base rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <option value="">全ステータス</option>
+                    <option value="OPEN" {% if status_filter == 'OPEN' or status_filter == '進行中' %}selected{% endif %}>進行中</option>
+                    <option value="WON" {% if status_filter == 'WON' or status_filter == '受注' or status_filter == '成約' %}selected{% endif %}>受注</option>
+                    <option value="LOST" {% if status_filter == 'LOST' or status_filter == '失注' %}selected{% endif %}>失注</option>
+                </select>
+                <select name="assignee" class="flex-1 sm:flex-initial px-4 py-3 text-base rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <option value="">全担当者</option>
+                    {% for user in users %}
+                    <option value="{{ user.id }}" {% if assignee_filter == user.id|string %}selected{% endif %}>{{ user.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2 sm:gap-4">
+                <button type="button" onclick="toggleAdvancedFilters()" class="flex-1 sm:flex-initial px-4 py-3 text-base bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg transition duration-200">
+                    <span class="hidden sm:inline">詳細フィルタ </span><span id="filterToggleIcon">▼</span>
+                </button>
+                <button type="submit" class="flex-1 sm:flex-initial px-6 py-3 text-base bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-200">
+                    検索
+                </button>
+            </div>
+        </div>
+        
+        <!-- ソート機能 -->
+        <div class="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4 items-start sm:items-center">
+            <label class="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">並び替え:</label>
+            <div class="flex flex-col sm:flex-row gap-3 flex-1 sm:flex-initial">
+                <select name="sort_by" class="flex-1 sm:flex-initial px-4 py-3 text-base rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <option value="created_at" {% if sort_by == 'created_at' %}selected{% endif %}>作成日</option>
+                    <option value="updated_at" {% if sort_by == 'updated_at' %}selected{% endif %}>更新日</option>
+                    <option value="amount" {% if sort_by == 'amount' %}selected{% endif %}>金額</option>
+                    <option value="title" {% if sort_by == 'title' %}selected{% endif %}>案件名</option>
+                    <option value="stage_days" {% if sort_by == 'stage_days' %}selected{% endif %}>ステージ滞留日数</option>
+                </select>
+                <select name="sort_order" class="flex-1 sm:flex-initial px-4 py-3 text-base rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <option value="desc" {% if sort_order == 'desc' %}selected{% endif %}>降順（大きい順/新しい順）</option>
+                    <option value="asc" {% if sort_order == 'asc' %}selected{% endif %}>昇順（小さい順/古い順）</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- 高度なフィルタ（折りたたみ可能） -->
+        <div id="advancedFilters" class="hidden bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- 温度感スコア -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">温度感</label>
+                    <select name="heat_score" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">すべて</option>
+                        <option value="A" {% if heat_score_filter == 'A' %}selected{% endif %}>A（最優先）</option>
+                        <option value="B" {% if heat_score_filter == 'B' %}selected{% endif %}>B（高）</option>
+                        <option value="C" {% if heat_score_filter == 'C' %}selected{% endif %}>C（中）</option>
+                        <option value="ネタ" {% if heat_score_filter == 'ネタ' %}selected{% endif %}>ネタ（見込み薄）</option>
+                    </select>
+                </div>
+                
+                <!-- 金額範囲 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">金額（最小）</label>
+                    <input type="number" name="amount_min" value="{{ amount_min }}" placeholder="最小金額" step="0.01"
+                           class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">金額（最大）</label>
+                    <input type="number" name="amount_max" value="{{ amount_max }}" placeholder="最大金額" step="0.01"
+                           class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+                
+                <!-- 作成日範囲 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">作成日（開始）</label>
+                    <input type="date" name="created_from" value="{{ created_from }}"
+                           class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">作成日（終了）</label>
+                    <input type="date" name="created_to" value="{{ created_to }}"
+                           class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+                
+                <!-- 計上月 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">計上月（受注案件のみ）</label>
+                    <input type="month" name="revenue_month" value="{{ revenue_month }}"
+                           class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+            </div>
+            
+            <!-- 適用中のフィルタ表示 -->
+            {% if heat_score_filter or amount_min or amount_max or created_from or created_to or revenue_month %}
+            <div class="mt-4 pt-4 border-t border-gray-300 dark:border-gray-600">
+                <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">適用中のフィルタ:</p>
+                <div class="flex flex-wrap gap-2">
+                    {% if heat_score_filter %}
+                    <span class="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-sm">
+                        温度感: {{ heat_score_filter }}
+                    </span>
+                    {% endif %}
+                    {% if amount_min or amount_max %}
+                    <span class="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-sm">
+                        金額: {% if amount_min %}¥{{ "{:,.0f}".format(amount_min|float) }}{% endif %}〜{% if amount_max %}¥{{ "{:,.0f}".format(amount_max|float) }}{% endif %}
+                    </span>
+                    {% endif %}
+                    {% if created_from or created_to %}
+                    <span class="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-sm">
+                        作成日: {{ created_from or '開始' }}〜{{ created_to or '終了' }}
+                    </span>
+                    {% endif %}
+                    {% if revenue_month %}
+                    <span class="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-sm">
+                        計上月: {{ revenue_month }}
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            
+            <div class="mt-4 flex gap-2">
+                <button type="submit" class="px-4 py-2 bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-200">
+                    適用
+                </button>
+                <button type="button" onclick="clearAdvancedFilters()" class="px-4 py-2 bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-medium rounded-lg transition duration-200">
+                    フィルタをクリア
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-x-auto -mx-4 sm:mx-0">
+    <table class="w-full table-auto">
+        <thead class="bg-gray-50 dark:bg-gray-700">
+            <tr>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">案件名</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">企業</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">担当者</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">温度感</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">ステージ</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">金額</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">アポイント日</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">NEXT ACTION</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">ステータス</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">操作</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+            {% if deals %}
+                {% for deal in deals %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td class="px-6 py-4">
+                        <div class="flex items-center gap-2 whitespace-nowrap">
+                            <span class="font-medium text-gray-900 dark:text-white">{{ deal.title }}</span>
+                            {% if deal.days_in_stage and deal.days_in_stage >= 30 and deal.status == '進行中' %}
+                            <span class="px-2 py-1 text-xs font-medium bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 rounded-full whitespace-nowrap" title="{{ deal.days_in_stage }}日滞留">
+                                ⚠️ 滞留
+                            </span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <a href="{{ url_for('view_company', id=deal.company.id) }}" class="text-primary hover:underline">
+                            {{ deal.company.name }}
+                        </a>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if deal.get_assignee_name() %}
+                        <span class="px-3 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 whitespace-nowrap">
+                            {{ deal.get_assignee_name() }}
+                        </span>
+                        {% else %}
+                        <span class="text-gray-400 text-sm">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if deal.heat_score %}
+                        <span class="px-3 py-1 text-xs font-bold rounded-full whitespace-nowrap
+                            {% if deal.heat_score == 'A' %}bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200
+                            {% elif deal.heat_score == 'B' %}bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200
+                            {% elif deal.heat_score == 'C' %}bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200
+                            {% elif deal.heat_score == 'ネタ' %}bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200
+                            {% endif %}">
+                            {{ deal.heat_score }}
+                        </span>
+                        {% else %}
+                        <span class="text-gray-400 text-sm">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex flex-col gap-1">
+                            <span class="px-3 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 whitespace-nowrap inline-block">
+                                {{ deal.stage }}
+                            </span>
+                            {% if deal.stage_entered_at %}
+                            <span class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                {{ deal.days_in_stage }}日
+                            </span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white font-medium">¥{{ "{:,.0f}".format(deal.amount) }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if deal.appointment_date %}
+                        <span class="text-sm text-gray-700 dark:text-gray-300">
+                            {{ deal.appointment_date.strftime('%Y-%m-%d') }}
+                        </span>
+                        {% else %}
+                        <span class="text-gray-400 text-sm">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4">
+                        {% if deal.next_action %}
+                        <div class="text-sm text-gray-700 dark:text-gray-300 max-w-xs truncate" title="{{ deal.next_action }}">
+                            {{ deal.next_action[:50] }}{% if deal.next_action|length > 50 %}...{% endif %}
+                        </div>
+                        {% else %}
+                        <span class="text-gray-400 text-sm">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-3 py-1 text-xs font-medium rounded-full whitespace-nowrap
+                            {% if deal.status == 'OPEN' or deal.status == '進行中' %}bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200
+                            {% elif deal.status == 'WON' or deal.status == '受注' %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200
+                            {% elif deal.status == 'LOST' or deal.status == '失注' %}bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200
+                            {% else %}bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200{% endif %}">
+                            {% if deal.status == 'OPEN' %}進行中
+                            {% elif deal.status == 'WON' %}受注
+                            {% elif deal.status == 'LOST' %}失注
+                            {% else %}{{ deal.status }}{% endif %}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="flex gap-2 whitespace-nowrap">
+                            <a href="{{ url_for('view_deal', id=deal.id) }}" class="px-4 py-2 text-sm font-medium bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 rounded hover:bg-purple-200 dark:hover:bg-purple-800 whitespace-nowrap inline-block">
+                                詳細
+                            </a>
+                            {% if deal.status == 'OPEN' or deal.status == '進行中' %}
+                            <button onclick="openCloseDealModal({{ deal.id }}, '{{ deal.title }}')" class="px-4 py-2 text-sm font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded hover:bg-green-200 dark:hover:bg-green-800 whitespace-nowrap">
+                                クローズ
+                            </button>
+                            {% endif %}
+                            <a href="{{ url_for('edit_deal', id=deal.id) }}" class="px-4 py-2 text-sm font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded hover:bg-blue-200 dark:hover:bg-blue-800 whitespace-nowrap inline-block">
+                                編集
+                            </a>
+                            <form method="POST" action="{{ url_for('delete_deal', id=deal.id) }}" onsubmit="return confirm('本当に削除しますか？');" class="inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <button type="submit" class="px-4 py-2 text-sm font-medium bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 rounded hover:bg-red-200 dark:hover:bg-red-800 whitespace-nowrap">
+                                    削除
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="9" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        案件が登録されていません
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Close Deal Modal -->
+<div id="closeDealModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50" role="dialog" aria-modal="true" aria-labelledby="closeDealTitle">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-lg mx-4">
+        <div class="flex items-center justify-between mb-4">
+            <h3 id="closeDealTitle" class="text-xl font-bold text-gray-900 dark:text-white">案件クローズ</h3>
+            <button onclick="closeCloseDealModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <div class="mb-4">
+            <p class="text-gray-600 dark:text-gray-400">案件: <span id="closeDealName" class="font-medium text-gray-900 dark:text-white"></span></p>
+        </div>
+        
+        <!-- Status Toggle -->
+        <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">結果</label>
+            <div class="flex gap-4">
+                <label class="flex items-center cursor-pointer">
+                    <input type="radio" name="dealOutcome" value="WON" checked class="w-4 h-4 text-green-600 focus:ring-green-500">
+                    <span class="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">受注 (WON)</span>
+                </label>
+                <label class="flex items-center cursor-pointer">
+                    <input type="radio" name="dealOutcome" value="LOST" class="w-4 h-4 text-red-600 focus:ring-red-500">
+                    <span class="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">失注 (LOST)</span>
+                </label>
+            </div>
+        </div>
+        
+        <!-- Reason Category -->
+        <div class="mb-4">
+            <label for="reasonCategory" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">理由カテゴリ</label>
+            <select id="reasonCategory" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                <option value="">選択してください (任意)</option>
+            </select>
+        </div>
+        
+        <!-- Reason Detail -->
+        <div class="mb-6">
+            <label for="reasonDetail" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">詳細 (任意)</label>
+            <textarea id="reasonDetail" rows="3" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="具体的な理由や詳細を入力..."></textarea>
+            <p id="detailRequiredMsg" class="text-sm text-red-600 dark:text-red-400 mt-1 hidden">「その他」を選択した場合、詳細は必須です。</p>
+        </div>
+        
+        <!-- Actions -->
+        <div class="flex gap-3">
+            <button id="submitCloseBtn" onclick="submitCloseDeal()" class="flex-1 px-4 py-2 bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                <span id="submitBtnText">保存</span>
+                <span id="submitBtnLoading" class="hidden">保存中...</span>
+            </button>
+            <button onclick="closeCloseDealModal()" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg transition duration-200">
+                キャンセル
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Notification -->
+<div id="toast" class="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg hidden z-50">
+    <p id="toastMessage"></p>
+</div>
+
+<script>
+// Win/Loss reason categories
+const WIN_REASONS = {{ win_reasons|tojson }};
+const LOSS_REASONS = {{ loss_reasons|tojson }};
+
+let currentDealId = null;
+
+// Open modal
+function openCloseDealModal(dealId, dealTitle) {
+    currentDealId = dealId;
+    document.getElementById('closeDealName').textContent = dealTitle;
+    document.getElementById('closeDealModal').classList.remove('hidden');
+    document.getElementById('closeDealModal').classList.add('flex');
+    
+    // Reset form
+    document.querySelector('input[name="dealOutcome"][value="WON"]').checked = true;
+    document.getElementById('reasonDetail').value = '';
+    updateReasonOptions();
+}
+
+// Close modal
+function closeCloseDealModal() {
+    document.getElementById('closeDealModal').classList.add('hidden');
+    document.getElementById('closeDealModal').classList.remove('flex');
+    currentDealId = null;
+}
+
+// Update reason options based on outcome
+function updateReasonOptions() {
+    const outcome = document.querySelector('input[name="dealOutcome"]:checked').value;
+    const select = document.getElementById('reasonCategory');
+    const reasons = outcome === 'WON' ? WIN_REASONS : LOSS_REASONS;
+    
+    select.innerHTML = '<option value="">選択してください (任意)</option>';
+    reasons.forEach(reason => {
+        const option = document.createElement('option');
+        option.value = reason;
+        option.textContent = reason;
+        select.appendChild(option);
+    });
+}
+
+// Listen to outcome change
+document.querySelectorAll('input[name="dealOutcome"]').forEach(radio => {
+    radio.addEventListener('change', updateReasonOptions);
+});
+
+// Advanced filters toggle
+function toggleAdvancedFilters() {
+    const filters = document.getElementById('advancedFilters');
+    const icon = document.getElementById('filterToggleIcon');
+    
+    if (filters.classList.contains('hidden')) {
+        filters.classList.remove('hidden');
+        icon.textContent = '▲';
+    } else {
+        filters.classList.add('hidden');
+        icon.textContent = '▼';
+    }
+}
+
+// Clear advanced filters
+function clearAdvancedFilters() {
+    document.querySelector('input[name="amount_min"]').value = '';
+    document.querySelector('input[name="amount_max"]').value = '';
+    document.querySelector('input[name="created_from"]').value = '';
+    document.querySelector('input[name="created_to"]').value = '';
+    document.querySelector('input[name="revenue_month"]').value = '';
+    document.querySelector('select[name="heat_score"]').value = '';
+}
+
+// Auto-expand filters if any advanced filter is active
+document.addEventListener('DOMContentLoaded', function() {
+    const hasAdvancedFilters = {{ 'true' if (heat_score_filter or amount_min or amount_max or created_from or created_to or revenue_month) else 'false' }};
+    if (hasAdvancedFilters) {
+        toggleAdvancedFilters();
+    }
+    
+    // ソート変更時に自動送信
+    const sortBySelect = document.querySelector('select[name="sort_by"]');
+    const sortOrderSelect = document.querySelector('select[name="sort_order"]');
+    
+    if (sortBySelect) {
+        sortBySelect.addEventListener('change', function() {
+            document.getElementById('dealFilterForm').submit();
+        });
+    }
+    
+    if (sortOrderSelect) {
+        sortOrderSelect.addEventListener('change', function() {
+            document.getElementById('dealFilterForm').submit();
+        });
+    }
+});
+
+// Listen to category change
+document.getElementById('reasonCategory').addEventListener('change', function() {
+    const detailMsg = document.getElementById('detailRequiredMsg');
+    if (this.value === 'その他') {
+        detailMsg.classList.remove('hidden');
+    } else {
+        detailMsg.classList.add('hidden');
+    }
+});
+
+// Submit close deal
+async function submitCloseDeal() {
+    const outcome = document.querySelector('input[name="dealOutcome"]:checked').value;
+    const category = document.getElementById('reasonCategory').value;
+    const detail = document.getElementById('reasonDetail').value.trim();
+    
+    // Validate "その他" requires detail
+    if (category === 'その他' && !detail) {
+        showToast('「その他」を選択した場合、詳細は必須です。', 'error');
+        return;
+    }
+    
+    // Disable button
+    const submitBtn = document.getElementById('submitCloseBtn');
+    const btnText = document.getElementById('submitBtnText');
+    const btnLoading = document.getElementById('submitBtnLoading');
+    submitBtn.disabled = true;
+    btnText.classList.add('hidden');
+    btnLoading.classList.remove('hidden');
+    
+    try {
+        const response = await fetch(`/api/deals/${currentDealId}/close`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({
+                status: outcome,
+                reason_category: category,
+                reason_detail: detail
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            showToast(data.message || '案件をクローズしました。', 'success');
+            closeCloseDealModal();
+            // Reload page after short delay
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showToast(data.error || '保存に失敗しました。', 'error');
+            submitBtn.disabled = false;
+            btnText.classList.remove('hidden');
+            btnLoading.classList.add('hidden');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showToast('エラーが発生しました。', 'error');
+        submitBtn.disabled = false;
+        btnText.classList.remove('hidden');
+        btnLoading.classList.add('hidden');
+    }
+}
+
+// Show toast notification
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    const toastMsg = document.getElementById('toastMessage');
+    
+    toastMsg.textContent = message;
+    toast.classList.remove('bg-green-500', 'bg-red-500');
+    toast.classList.add(type === 'success' ? 'bg-green-500' : 'bg-red-500');
+    toast.classList.remove('hidden');
+    
+    setTimeout(() => {
+        toast.classList.add('hidden');
+    }, 3000);
+}
+
+// Close modal on ESC key
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closeCloseDealModal();
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}案件詳細 - CONNECT+{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl">
+    <div class="mb-8 flex justify-between items-center">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+                {{ deal.title }}
+            </h1>
+            <p class="text-gray-600 dark:text-gray-400">案件詳細情報</p>
+        </div>
+        <div class="flex gap-3">
+            <a href="{{ url_for('edit_deal', id=deal.id) }}" 
+               class="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors">
+                編集
+            </a>
+            <a href="{{ url_for('deals') }}" 
+               class="px-6 py-3 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg font-medium transition-colors">
+                案件一覧に戻る
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div class="lg:col-span-2 space-y-6">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">基本情報</h2>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">企業</p>
+                        <p class="text-gray-900 dark:text-white font-medium">
+                            <a href="{{ url_for('view_company', id=company.id) }}" class="text-primary hover:underline">
+                                {{ company.name }}
+                            </a>
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">ステージ</p>
+                        <p class="text-gray-900 dark:text-white font-medium">{{ deal.stage }}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">ステータス</p>
+                        <span class="px-3 py-1 text-xs font-medium rounded-full
+                            {% if deal.status == 'OPEN' %}bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200
+                            {% elif deal.status == 'WON' %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200
+                            {% elif deal.status == 'LOST' %}bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200
+                            {% endif %}">
+                            {% if deal.status == 'OPEN' %}進行中
+                            {% elif deal.status == 'WON' %}受注
+                            {% elif deal.status == 'LOST' %}失注
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">温度感</p>
+                        <span class="px-3 py-1 text-xs font-medium rounded-full
+                            {% if deal.heat_score == 'A' %}bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200
+                            {% elif deal.heat_score == 'B' %}bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200
+                            {% elif deal.heat_score == 'C' %}bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200
+                            {% else %}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200
+                            {% endif %}">
+                            {{ deal.heat_score }}
+                        </span>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">金額</p>
+                        <p class="text-gray-900 dark:text-white font-bold text-lg">
+                            ¥{{ "{:,.0f}".format(deal.amount) if deal.amount else '未設定' }}
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">担当者</p>
+                        <p class="text-gray-900 dark:text-white">
+                            {% if deal.get_assignee_name() %}
+                            <span class="px-3 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                {{ deal.get_assignee_name() }}
+                            </span>
+                            {% else %}
+                            -
+                            {% endif %}
+                        </p>
+                    </div>
+                    {% if deal.status == 'WON' and deal.closed_at %}
+                    <div>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">計上月</p>
+                        <p class="text-gray-900 dark:text-white font-medium">{{ deal.revenue_month }}</p>
+                    </div>
+                    {% endif %}
+                    {% if deal.appointment_date %}
+                    <div>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">アポイント日</p>
+                        <p class="text-gray-900 dark:text-white">{{ deal.appointment_date.strftime('%Y-%m-%d') }}</p>
+                    </div>
+                    {% endif %}
+                    <div>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">作成日</p>
+                        <p class="text-gray-900 dark:text-white">{{ deal.created_at.strftime('%Y-%m-%d') }}</p>
+                    </div>
+                </div>
+            </div>
+
+            {% if deal.note or deal.meeting_minutes or deal.next_action %}
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">詳細情報</h2>
+                {% if deal.note %}
+                <div class="mb-4">
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">メモ</p>
+                    <p class="text-gray-900 dark:text-white whitespace-pre-wrap">{{ deal.note }}</p>
+                </div>
+                {% endif %}
+                {% if deal.meeting_minutes %}
+                <div class="mb-4">
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">会議議事録</p>
+                    <p class="text-gray-900 dark:text-white whitespace-pre-wrap">{{ deal.meeting_minutes }}</p>
+                </div>
+                {% endif %}
+                {% if deal.next_action %}
+                <div>
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">NEXT ACTION</p>
+                    <p class="text-gray-900 dark:text-white whitespace-pre-wrap">{{ deal.next_action }}</p>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-gray-900 dark:text-white">見積書</h2>
+                    <button onclick="createQuote()" 
+                            class="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg font-medium transition-colors">
+                        見積書作成
+                    </button>
+                </div>
+                {% if quotes %}
+                <div class="space-y-2">
+                    {% for quote in quotes %}
+                    <div class="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                        <div>
+                            <p class="text-gray-900 dark:text-white font-medium">{{ quote.subject }}</p>
+                            <p class="text-sm text-gray-600 dark:text-gray-400">
+                                発行日: {{ quote.issue_date.strftime('%Y-%m-%d') }} | 
+                                金額: ¥{{ "{:,.0f}".format(quote.total) }}
+                            </p>
+                        </div>
+                        <a href="{{ url_for('view_quote', id=quote.id) }}" 
+                           class="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded">
+                            詳細
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-gray-500 dark:text-gray-400 text-center py-4">見積書がまだありません</p>
+                {% endif %}
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-gray-900 dark:text-white">請求書</h2>
+                    <button onclick="createInvoice()" 
+                            class="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg font-medium transition-colors">
+                        請求書作成
+                    </button>
+                </div>
+                {% if invoices %}
+                <div class="space-y-2">
+                    {% for invoice in invoices %}
+                    <div class="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                        <div>
+                            <p class="text-gray-900 dark:text-white font-medium">{{ invoice.subject }}</p>
+                            <p class="text-sm text-gray-600 dark:text-gray-400">
+                                発行日: {{ invoice.issue_date.strftime('%Y-%m-%d') }} | 
+                                金額: ¥{{ "{:,.0f}".format(invoice.total) }}
+                            </p>
+                        </div>
+                        <a href="{{ url_for('view_invoice', id=invoice.id) }}" 
+                           class="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded">
+                            詳細
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-gray-500 dark:text-gray-400 text-center py-4">請求書がまだありません</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="space-y-6">
+            <div class="bg-gradient-to-br from-primary to-primary-dark rounded-xl shadow-sm p-6 text-white">
+                <p class="text-white/80 mb-1">案件金額</p>
+                <p class="text-3xl font-bold">¥{{ "{:,.0f}".format(deal.amount) if deal.amount else '0' }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function createQuote() {
+    if (!confirm('この案件から見積書を作成しますか？\n\n企業名、案件名、金額が自動で反映されます。')) return;
+    
+    try {
+        const response = await fetch('/deals/{{ deal.id }}/create-quote', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            alert('見積書を作成しました');
+            window.location.href = '/quotes/' + data.id;
+        } else {
+            alert('エラー: ' + data.error);
+        }
+    } catch (error) {
+        alert('見積書の作成に失敗しました: ' + error.message);
+    }
+}
+
+async function createInvoice() {
+    if (!confirm('この案件から請求書を作成しますか？\n\n企業名、案件名、金額が自動で反映されます。')) return;
+    
+    try {
+        const response = await fetch('/deals/{{ deal.id }}/create-invoice', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            alert('請求書を作成しました');
+            window.location.href = '/invoices/' + data.id;
+        } else {
+            alert('エラー: ' + data.error);
+        }
+    } catch (error) {
+        alert('請求書の作成に失敗しました: ' + error.message);
+    }
+}
+</script>
+{% endblock %}

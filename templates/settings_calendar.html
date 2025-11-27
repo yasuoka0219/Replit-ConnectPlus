@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Googleカレンダー連携 - CONNECT+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-4xl mx-auto">
+        <div class="mb-6">
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">Googleカレンダー連携</h1>
+            <p class="text-gray-600 dark:text-gray-400">Googleカレンダーと連携して、タスクやアポイントメントを自動的に同期できます</p>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="mb-4 p-4 rounded-lg {% if category == 'success' %}bg-green-100 text-green-800{% elif category == 'error' %}bg-red-100 text-red-800{% else %}bg-blue-100 text-blue-800{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
+            {% if connection_status.connected %}
+            <!-- Connected State -->
+            <div class="mb-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Googleカレンダー連携</h2>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">現在連携中です</p>
+                    </div>
+                    <span class="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">連携中</span>
+                </div>
+            </div>
+
+            <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
+                <div class="space-y-4 mb-6">
+                    {% if connection_status.connected_at %}
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-600 dark:text-gray-400">連携開始日時:</span>
+                        <span class="text-sm font-medium text-gray-900 dark:text-white">{{ connection_status.connected_at.strftime('%Y年%m月%d日 %H:%M') }}</span>
+                    </div>
+                    {% endif %}
+                    {% if connection_status.last_sync_at %}
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-600 dark:text-gray-400">最終同期日時:</span>
+                        <span class="text-sm font-medium text-gray-900 dark:text-white">{{ connection_status.last_sync_at.strftime('%Y年%m月%d日 %H:%M') }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="flex gap-3">
+                    <button onclick="testConnection()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition duration-200">
+                        接続をテスト
+                    </button>
+                    <button onclick="disconnectCalendar()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition duration-200">
+                        連携を解除
+                    </button>
+                </div>
+            </div>
+            {% else %}
+            <!-- Not Connected State -->
+            <div class="mb-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Googleカレンダー連携</h2>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">連携することで、タスクやアポイントメントを自動的にGoogleカレンダーに追加できます</p>
+                    </div>
+                    <span class="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm font-medium">未連携</span>
+                </div>
+            </div>
+
+            <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
+                <div class="mb-6">
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">連携のメリット</h3>
+                    <ul class="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                        <li class="flex items-start">
+                            <svg class="w-5 h-5 text-green-500 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            タスクやアポイントメントを自動的にGoogleカレンダーに追加
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-5 h-5 text-green-500 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            カレンダーアプリから予定を確認・編集
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-5 h-5 text-green-500 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            他のカレンダーアプリとの連携も可能
+                        </li>
+                    </ul>
+                </div>
+
+                <a href="{{ url_for('google_auth') }}" class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition duration-200">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                    </svg>
+                    Googleカレンダーと連携する
+                </a>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Setup Instructions -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">セットアップ方法</h2>
+            <div class="prose dark:prose-invert max-w-none">
+                <ol class="list-decimal list-inside space-y-3 text-sm text-gray-600 dark:text-gray-400">
+                    <li>Google Cloud Consoleでプロジェクトを作成します</li>
+                    <li>Google Calendar APIを有効にします</li>
+                    <li>OAuth 2.0認証情報（クライアントID/シークレット）を作成します</li>
+                    <li>リダイレクトURIに <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">http://localhost:5001/auth/google/callback</code> を追加します</li>
+                    <li>環境変数 <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">GOOGLE_CLIENT_ID</code> と <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">GOOGLE_CLIENT_SECRET</code> を設定します</li>
+                    <li>上記の「Googleカレンダーと連携する」ボタンをクリックして認証を完了します</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function testConnection() {
+    fetch('/api/calendar/test', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Googleカレンダーとの接続が正常です');
+        } else {
+            alert('エラー: ' + (data.error || '接続に失敗しました'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('エラーが発生しました');
+    });
+}
+
+function disconnectCalendar() {
+    if (!confirm('Googleカレンダーとの連携を解除してもよろしいですか？')) {
+        return;
+    }
+
+    fetch('/api/calendar/disconnect', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('連携を解除しました');
+            location.reload();
+        } else {
+            alert('エラー: ' + (data.error || '解除に失敗しました'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('エラーが発生しました');
+    });
+}
+</script>
+{% endblock %}
+

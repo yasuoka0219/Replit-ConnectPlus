@@ -1,0 +1,566 @@
+{% extends "base.html" %}
+
+{% block title %}{{ company.name }} - CONNECT+{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <a href="{{ url_for('companies') }}" class="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+        ← 企業一覧に戻る
+    </a>
+</div>
+
+<div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8 mb-6">
+    <div class="flex justify-between items-start mb-6">
+        <div class="flex-1">
+            <div class="flex items-center gap-4 mb-4">
+                <h1 class="text-3xl font-bold text-gray-900 dark:text-white">{{ company.name }}</h1>
+            </div>
+            
+            {% if company.tags %}
+            <div class="flex flex-wrap gap-2 mb-4">
+                {% for tag in company.get_tags_list() %}
+                <span class="px-3 py-1 text-sm bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full">
+                    {{ tag }}
+                </span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                    <span class="text-gray-500 dark:text-gray-400">業種</span>
+                    <div class="font-medium text-gray-900 dark:text-white">{{ company.industry or '-' }}</div>
+                </div>
+                <div>
+                    <span class="text-gray-500 dark:text-gray-400">所在地</span>
+                    <div class="font-medium text-gray-900 dark:text-white">{{ company.location or '-' }}</div>
+                </div>
+                <div>
+                    <span class="text-gray-500 dark:text-gray-400">従業員数</span>
+                    <div class="font-medium text-gray-900 dark:text-white">{{ company.employee_size or '-' }}</div>
+                </div>
+                <div>
+                    <span class="text-gray-500 dark:text-gray-400">本社所在地</span>
+                    <div class="font-medium text-gray-900 dark:text-white">{{ company.hq_location or '-' }}</div>
+                </div>
+            </div>
+            
+            {% if company.website %}
+            <div class="mt-4">
+                <span class="text-gray-500 dark:text-gray-400 text-sm">ウェブサイト: </span>
+                <a href="{{ company.website }}" target="_blank" class="text-primary hover:underline text-sm">{{ company.website }}</a>
+            </div>
+            {% endif %}
+            
+            {% if company.needs %}
+            <div class="mt-4">
+                <span class="text-gray-500 dark:text-gray-400 text-sm">ニーズ</span>
+                <div class="text-gray-900 dark:text-white">{{ company.needs }}</div>
+            </div>
+            {% endif %}
+            
+            {% if company.kpi_current %}
+            <div class="mt-4">
+                <span class="text-gray-500 dark:text-gray-400 text-sm">現状KPI</span>
+                <div class="text-gray-900 dark:text-white">{{ company.kpi_current }}</div>
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="flex gap-2">
+            <a href="{{ url_for('edit_company', id=company.id) }}" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition">
+                編集
+            </a>
+        </div>
+    </div>
+    
+    {% if company.memo %}
+    <div class="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+        <div class="text-sm text-gray-500 dark:text-gray-400 mb-2">メモ</div>
+        <div class="text-gray-900 dark:text-white whitespace-pre-wrap">{{ company.memo }}</div>
+    </div>
+    {% endif %}
+</div>
+
+<div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+    <div class="border-b border-gray-200 dark:border-gray-700">
+        <nav class="flex">
+            <button onclick="switchTab('deals')" id="tab-deals" class="tab-button px-6 py-4 font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white border-b-2 border-transparent">
+                案件 ({{ deals|length }})
+            </button>
+            <button onclick="switchTab('contacts')" id="tab-contacts" class="tab-button px-6 py-4 font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white border-b-2 border-transparent">
+                担当者 ({{ contacts|length }})
+            </button>
+            <button onclick="switchTab('activities')" id="tab-activities" class="tab-button px-6 py-4 font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white border-b-2 border-transparent">
+                活動履歴
+            </button>
+        </nav>
+    </div>
+    
+    <div id="content-deals" class="tab-content hidden p-6">
+        <div class="mb-4">
+            <a href="{{ url_for('create_deal') }}?company_id={{ company.id }}" class="inline-block px-4 py-2 bg-primary hover:bg-indigo-700 text-white rounded-lg transition">
+                + 新規案件
+            </a>
+        </div>
+        
+        {% if deals %}
+        <div class="space-y-4">
+            {% for deal in deals %}
+            <div class="p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-primary transition">
+                <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                        <h3 class="font-medium text-gray-900 dark:text-white mb-2">{{ deal.title }}</h3>
+                        <div class="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
+                            <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded">{{ deal.stage }}</span>
+                            <span class="px-2 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded">{{ deal.status }}</span>
+                            <span class="font-medium">¥{{ "{:,.0f}".format(deal.amount) }}</span>
+                            {% if deal.stage_entered_at %}
+                            <span>ステージ滞留: {{ deal.days_in_stage }}日</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <a href="{{ url_for('edit_deal', id=deal.id) }}" class="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded hover:bg-gray-200 dark:hover:bg-gray-600">
+                        編集
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-8 text-gray-500 dark:text-gray-400">
+            案件が登録されていません
+        </div>
+        {% endif %}
+    </div>
+    
+    <div id="content-contacts" class="tab-content hidden p-6">
+        <div class="mb-4">
+            <button onclick="showAddContactModal()" class="px-4 py-2 bg-primary hover:bg-indigo-700 text-white rounded-lg transition">
+                + 新規担当者
+            </button>
+        </div>
+        
+        <div id="contacts-list">
+            {% if contacts %}
+            <div class="space-y-4">
+                {% for contact in contacts %}
+                <div class="p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-primary transition">
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                            <h3 class="font-medium text-gray-900 dark:text-white mb-2">{{ contact.name }}</h3>
+                            <div class="grid grid-cols-2 gap-3 text-sm text-gray-600 dark:text-gray-400">
+                                {% if contact.title %}
+                                <div>
+                                    <span class="text-gray-500 dark:text-gray-500">役職:</span> {{ contact.title }}
+                                </div>
+                                {% endif %}
+                                {% if contact.role %}
+                                <div>
+                                    <span class="text-gray-500 dark:text-gray-500">役割:</span> {{ contact.role }}
+                                </div>
+                                {% endif %}
+                                {% if contact.email %}
+                                <div class="col-span-2">
+                                    📧 <a href="mailto:{{ contact.email }}" class="text-primary hover:underline">{{ contact.email }}</a>
+                                </div>
+                                {% endif %}
+                                {% if contact.phone %}
+                                <div>
+                                    📱 {{ contact.phone }}
+                                </div>
+                                {% endif %}
+                            </div>
+                            {% if contact.notes %}
+                            <div class="mt-3 p-2 bg-gray-50 dark:bg-gray-700 rounded text-sm text-gray-600 dark:text-gray-400">
+                                <div class="text-gray-500 dark:text-gray-500 mb-1">メモ:</div>
+                                <div class="whitespace-pre-wrap">{{ contact.notes }}</div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="flex gap-2 ml-4">
+                            <button onclick="editContact({{ contact.id }})" class="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded hover:bg-gray-200 dark:hover:bg-gray-600">
+                                編集
+                            </button>
+                            <button onclick="deleteContact({{ contact.id }}, '{{ contact.name }}')" class="px-3 py-1 text-sm bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 rounded hover:bg-red-200 dark:hover:bg-red-800">
+                                削除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-8 text-gray-500 dark:text-gray-400">
+                担当者が登録されていません
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div id="content-activities" class="tab-content hidden p-6">
+        <div class="mb-4 flex gap-2">
+            <a href="{{ url_for('export_activities', format='csv', company_id=company.id) }}" 
+               class="px-4 py-2 text-sm bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition">
+                CSV出力
+            </a>
+            <a href="{{ url_for('export_activities', format='excel', company_id=company.id) }}" 
+               class="px-4 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg transition">
+                Excel出力
+            </a>
+        </div>
+        <div class="mb-6">
+            <button onclick="showAddActivityModal()" class="px-4 py-2 bg-primary hover:bg-indigo-700 text-white rounded-lg transition">
+                + 新規活動記録
+            </button>
+        </div>
+        
+        <div id="activities-list">
+            <div class="text-center py-8 text-gray-500 dark:text-gray-400">
+                読み込み中...
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="contact-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full m-4">
+        <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+            <h3 id="contact-modal-title" class="text-xl font-bold text-gray-900 dark:text-white">新規担当者</h3>
+        </div>
+        <form id="contact-form" class="p-6 space-y-4">
+            <input type="hidden" id="contact-id">
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">名前 *</label>
+                    <input type="text" id="contact-name" required class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">役職</label>
+                    <input type="text" id="contact-title" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">メールアドレス</label>
+                    <input type="email" id="contact-email" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">電話番号</label>
+                    <input type="tel" id="contact-phone" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">役割</label>
+                <input type="text" id="contact-role" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white" placeholder="例: 意思決定者、キーマン">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">メモ</label>
+                <textarea id="contact-notes" rows="3" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"></textarea>
+            </div>
+            <div class="flex gap-3">
+                <button type="submit" class="flex-1 px-4 py-2 bg-primary hover:bg-indigo-700 text-white rounded-lg transition">
+                    保存
+                </button>
+                <button type="button" onclick="hideContactModal()" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition">
+                    キャンセル
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="activity-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-lg w-full m-4">
+        <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white">活動を記録</h3>
+        </div>
+        <form id="activity-form" class="p-6 space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">活動タイプ</label>
+                <select id="activity-type" required class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                    <option value="call">電話</option>
+                    <option value="meeting">ミーティング</option>
+                    <option value="email">メール</option>
+                    <option value="note">メモ</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">タイトル</label>
+                <input type="text" id="activity-title" required class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">内容</label>
+                <textarea id="activity-body" rows="4" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"></textarea>
+            </div>
+            <div class="flex gap-3">
+                <button type="submit" class="flex-1 px-4 py-2 bg-primary hover:bg-indigo-700 text-white rounded-lg transition">
+                    保存
+                </button>
+                <button type="button" onclick="hideAddActivityModal()" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition">
+                    キャンセル
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+const companyId = {{ company.id }};
+const csrfToken = '{{ csrf_token() }}';
+let currentTab = 'deals';
+
+function switchTab(tab) {
+    document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('border-primary', 'text-primary');
+        btn.classList.add('border-transparent');
+    });
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.add('hidden');
+    });
+    
+    document.getElementById('tab-' + tab).classList.add('border-primary', 'text-primary');
+    document.getElementById('tab-' + tab).classList.remove('border-transparent');
+    document.getElementById('content-' + tab).classList.remove('hidden');
+    
+    currentTab = tab;
+    
+    if (tab === 'activities') {
+        loadActivities();
+    }
+}
+
+async function loadActivities() {
+    const container = document.getElementById('activities-list');
+    
+    try {
+        const response = await fetch(`/api/companies/${companyId}/activities`);
+        const data = await response.json();
+        
+        if (data.success && data.activities.length > 0) {
+            container.innerHTML = data.activities.map(activity => {
+                const typeLabels = {
+                    'call': '📞 電話',
+                    'meeting': '👥 ミーティング',
+                    'email': '📧 メール',
+                    'note': '📝 メモ'
+                };
+                const date = new Date(activity.happened_at);
+                return `
+                    <div class="p-4 border border-gray-200 dark:border-gray-700 rounded-lg mb-3">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="px-2 py-1 text-sm bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 rounded">
+                                ${typeLabels[activity.type] || activity.type}
+                            </span>
+                            <span class="text-sm text-gray-500 dark:text-gray-400">
+                                ${date.toLocaleDateString('ja-JP')} ${date.toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'})}
+                            </span>
+                        </div>
+                        <h4 class="font-medium text-gray-900 dark:text-white mb-2">${activity.title}</h4>
+                        ${activity.body ? `<p class="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap">${activity.body}</p>` : ''}
+                    </div>
+                `;
+            }).join('');
+        } else {
+            container.innerHTML = '<div class="text-center py-8 text-gray-500 dark:text-gray-400">活動履歴がありません</div>';
+        }
+    } catch (error) {
+        container.innerHTML = '<div class="text-center py-8 text-red-500">読み込みエラー</div>';
+        console.error('Error loading activities:', error);
+    }
+}
+
+function showAddActivityModal() {
+    document.getElementById('activity-modal').classList.remove('hidden');
+    document.getElementById('activity-modal').classList.add('flex');
+}
+
+function hideAddActivityModal() {
+    document.getElementById('activity-modal').classList.add('hidden');
+    document.getElementById('activity-modal').classList.remove('flex');
+    document.getElementById('activity-form').reset();
+}
+
+document.getElementById('activity-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const activityData = {
+        type: document.getElementById('activity-type').value,
+        title: document.getElementById('activity-title').value,
+        body: document.getElementById('activity-body').value
+    };
+    
+    try {
+        const response = await fetch(`/api/companies/${companyId}/activities`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify(activityData)
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            hideAddActivityModal();
+            loadActivities();
+        } else {
+            alert('エラー: ' + (data.error || '保存できませんでした'));
+        }
+    } catch (error) {
+        alert('通信エラーが発生しました');
+        console.error('Error saving activity:', error);
+    }
+});
+
+function showAddContactModal() {
+    document.getElementById('contact-modal-title').textContent = '新規担当者';
+    document.getElementById('contact-id').value = '';
+    document.getElementById('contact-form').reset();
+    document.getElementById('contact-modal').classList.remove('hidden');
+    document.getElementById('contact-modal').classList.add('flex');
+}
+
+function hideContactModal() {
+    document.getElementById('contact-modal').classList.add('hidden');
+    document.getElementById('contact-modal').classList.remove('flex');
+    document.getElementById('contact-form').reset();
+}
+
+async function editContact(contactId) {
+    try {
+        const response = await fetch(`/api/contacts/${contactId}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            document.getElementById('contact-modal-title').textContent = '担当者編集';
+            document.getElementById('contact-id').value = data.contact.id;
+            document.getElementById('contact-name').value = data.contact.name || '';
+            document.getElementById('contact-title').value = data.contact.title || '';
+            document.getElementById('contact-email').value = data.contact.email || '';
+            document.getElementById('contact-phone').value = data.contact.phone || '';
+            document.getElementById('contact-role').value = data.contact.role || '';
+            document.getElementById('contact-notes').value = data.contact.notes || '';
+            
+            document.getElementById('contact-modal').classList.remove('hidden');
+            document.getElementById('contact-modal').classList.add('flex');
+        }
+    } catch (error) {
+        alert('担当者情報の読み込みに失敗しました');
+        console.error('Error loading contact:', error);
+    }
+}
+
+async function deleteContact(contactId, contactName) {
+    if (!confirm(`${contactName} を削除してもよろしいですか？`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/contacts/${contactId}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': csrfToken
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            loadContacts();
+        } else {
+            alert('エラー: ' + (data.error || '削除できませんでした'));
+        }
+    } catch (error) {
+        alert('通信エラーが発生しました');
+        console.error('Error deleting contact:', error);
+    }
+}
+
+async function loadContacts() {
+    try {
+        const response = await fetch(`/api/companies/${companyId}/contacts`);
+        const data = await response.json();
+        
+        const container = document.getElementById('contacts-list');
+        
+        if (data.success && data.contacts.length > 0) {
+            container.innerHTML = '<div class="space-y-4">' + data.contacts.map(contact => `
+                <div class="p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-primary transition">
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                            <h3 class="font-medium text-gray-900 dark:text-white mb-2">${contact.name}</h3>
+                            <div class="grid grid-cols-2 gap-3 text-sm text-gray-600 dark:text-gray-400">
+                                ${contact.title ? `<div><span class="text-gray-500 dark:text-gray-500">役職:</span> ${contact.title}</div>` : ''}
+                                ${contact.role ? `<div><span class="text-gray-500 dark:text-gray-500">役割:</span> ${contact.role}</div>` : ''}
+                                ${contact.email ? `<div class="col-span-2">📧 <a href="mailto:${contact.email}" class="text-primary hover:underline">${contact.email}</a></div>` : ''}
+                                ${contact.phone ? `<div>📱 ${contact.phone}</div>` : ''}
+                            </div>
+                            ${contact.notes ? `<div class="mt-3 p-2 bg-gray-50 dark:bg-gray-700 rounded text-sm text-gray-600 dark:text-gray-400">
+                                <div class="text-gray-500 dark:text-gray-500 mb-1">メモ:</div>
+                                <div class="whitespace-pre-wrap">${contact.notes}</div>
+                            </div>` : ''}
+                        </div>
+                        <div class="flex gap-2 ml-4">
+                            <button onclick="editContact(${contact.id})" class="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded hover:bg-gray-200 dark:hover:bg-gray-600">
+                                編集
+                            </button>
+                            <button onclick="deleteContact(${contact.id}, '${contact.name}')" class="px-3 py-1 text-sm bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 rounded hover:bg-red-200 dark:hover:bg-red-800">
+                                削除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('') + '</div>';
+        } else {
+            container.innerHTML = '<div class="text-center py-8 text-gray-500 dark:text-gray-400">担当者が登録されていません</div>';
+        }
+    } catch (error) {
+        console.error('Error loading contacts:', error);
+    }
+}
+
+document.getElementById('contact-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const contactId = document.getElementById('contact-id').value;
+    const contactData = {
+        name: document.getElementById('contact-name').value,
+        title: document.getElementById('contact-title').value,
+        email: document.getElementById('contact-email').value,
+        phone: document.getElementById('contact-phone').value,
+        role: document.getElementById('contact-role').value,
+        notes: document.getElementById('contact-notes').value
+    };
+    
+    try {
+        const url = contactId ? `/api/contacts/${contactId}` : `/api/companies/${companyId}/contacts`;
+        const method = contactId ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify(contactData)
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            hideContactModal();
+            loadContacts();
+        } else {
+            alert('エラー: ' + (data.error || '保存できませんでした'));
+        }
+    } catch (error) {
+        alert('通信エラーが発生しました');
+        console.error('Error saving contact:', error);
+    }
+});
+
+switchTab('deals');
+</script>
+{% endblock %}

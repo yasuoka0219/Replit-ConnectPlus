@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+
+{% block title %}企業管理 - CONNECT+{% endblock %}
+
+{% block content %}
+<div class="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+        <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">企業管理</h1>
+        <p class="text-sm sm:text-base text-gray-600 dark:text-gray-400">企業情報を管理</p>
+    </div>
+    <div class="flex flex-col sm:flex-row gap-3 sm:items-center">
+        {% if can_import_export %}
+        <div class="flex flex-wrap gap-2">
+            <a href="{{ url_for('export_companies', format='csv') }}{% if search or industry_filter or heat_score_filter or employee_min or employee_max or last_contact_filter or tag_filter %}?search={{ search }}&industry={{ industry_filter }}&heat_score={{ heat_score_filter }}&employee_min={{ employee_min }}&employee_max={{ employee_max }}&last_contact={{ last_contact_filter }}&tag={{ tag_filter }}{% endif %}" 
+               class="px-4 py-3 text-base text-center bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition duration-200">
+                CSV出力
+            </a>
+            <a href="{{ url_for('export_companies', format='excel') }}{% if search or industry_filter or heat_score_filter or employee_min or employee_max or last_contact_filter or tag_filter %}?search={{ search }}&industry={{ industry_filter }}&heat_score={{ heat_score_filter }}&employee_min={{ employee_min }}&employee_max={{ employee_max }}&last_contact={{ last_contact_filter }}&tag={{ tag_filter }}{% endif %}" 
+               class="px-4 py-3 text-base text-center bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition duration-200">
+                Excel出力
+            </a>
+            <a href="{{ url_for('import_companies') }}" 
+               class="px-4 py-3 text-base text-center bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition duration-200">
+                インポート
+            </a>
+        </div>
+        {% endif %}
+        <a href="{{ url_for('create_company') }}" class="w-full sm:w-auto px-6 py-3 text-base text-center bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-200">
+            + 新規企業
+        </a>
+    </div>
+</div>
+
+<div class="mb-6">
+    <form method="GET" action="{{ url_for('companies') }}" id="companyFilterForm">
+        <!-- 基本検索・フィルタ -->
+        <div class="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4">
+            <input type="text" name="search" value="{{ search }}" placeholder="企業名、業種、所在地で検索..." 
+                   class="flex-1 min-w-0 px-4 py-3 text-base rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+            <div class="flex gap-2 sm:gap-4">
+                <button type="button" onclick="toggleAdvancedFilters()" class="flex-1 sm:flex-initial px-4 py-3 text-base bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg transition duration-200">
+                    <span class="hidden sm:inline">詳細フィルタ </span><span id="filterToggleIcon">▼</span>
+                </button>
+                <button type="submit" class="flex-1 sm:flex-initial px-6 py-3 text-base bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-200">
+                    検索
+                </button>
+            </div>
+        </div>
+        
+        <!-- ソート機能 -->
+        <div class="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4 items-start sm:items-center">
+            <label class="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">並び替え:</label>
+            <div class="flex flex-col sm:flex-row gap-3 flex-1 sm:flex-initial">
+                <select name="sort_by" class="flex-1 sm:flex-initial px-4 py-3 text-base rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <option value="name" {% if sort_by == 'name' %}selected{% endif %}>企業名</option>
+                    <option value="last_contact" {% if sort_by == 'last_contact' %}selected{% endif %}>最終接触日</option>
+                    <option value="heat_score" {% if sort_by == 'heat_score' %}selected{% endif %}>温度感スコア</option>
+                    <option value="deal_count" {% if sort_by == 'deal_count' %}selected{% endif %}>案件数</option>
+                </select>
+                <select name="sort_order" class="flex-1 sm:flex-initial px-4 py-3 text-base rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <option value="asc" {% if sort_order == 'asc' %}selected{% endif %}>昇順（小さい順/古い順）</option>
+                    <option value="desc" {% if sort_order == 'desc' %}selected{% endif %}>降順（大きい順/新しい順）</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- 高度なフィルタ（折りたたみ可能） -->
+        <div id="advancedFilters" class="hidden bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- 業界フィルタ -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">業界</label>
+                    <select name="industry" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">すべて</option>
+                        {% for industry in industries %}
+                        <option value="{{ industry }}" {% if industry_filter == industry %}selected{% endif %}>{{ industry }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- 温度感スコア -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">温度感スコア</label>
+                    <select name="heat_score" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">すべて</option>
+                        <option value="5" {% if heat_score_filter == '5' %}selected{% endif %}>5（最高）</option>
+                        <option value="4" {% if heat_score_filter == '4' %}selected{% endif %}>4（高）</option>
+                        <option value="3" {% if heat_score_filter == '3' %}selected{% endif %}>3（中）</option>
+                        <option value="2" {% if heat_score_filter == '2' %}selected{% endif %}>2（低）</option>
+                        <option value="1" {% if heat_score_filter == '1' %}selected{% endif %}>1（最低）</option>
+                    </select>
+                </div>
+                
+                <!-- 従業員数範囲 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">従業員数（最小）</label>
+                    <input type="number" name="employee_min" value="{{ employee_min }}" placeholder="最小人数" min="0"
+                           class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">従業員数（最大）</label>
+                    <input type="number" name="employee_max" value="{{ employee_max }}" placeholder="最大人数" min="0"
+                           class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+                
+                <!-- 最終接触日 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">最終接触日</label>
+                    <select name="last_contact" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">すべて</option>
+                        <option value="30days" {% if last_contact_filter == '30days' %}selected{% endif %}>30日以内</option>
+                        <option value="60days" {% if last_contact_filter == '60days' %}selected{% endif %}>60日以内</option>
+                        <option value="90days" {% if last_contact_filter == '90days' %}selected{% endif %}>90日以内</option>
+                        <option value="over90days" {% if last_contact_filter == 'over90days' %}selected{% endif %}>90日以上（長期未接触）</option>
+                        <option value="never" {% if last_contact_filter == 'never' %}selected{% endif %}>未接触</option>
+                    </select>
+                </div>
+                
+                <!-- タグフィルタ -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">タグ</label>
+                    <input type="text" name="tag" value="{{ tag_filter }}" placeholder="タグ名で検索..."
+                           class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+            </div>
+            
+            <!-- 適用中のフィルタ表示 -->
+            {% if industry_filter or heat_score_filter or employee_min or employee_max or last_contact_filter or tag_filter %}
+            <div class="mt-4 pt-4 border-t border-gray-300 dark:border-gray-600">
+                <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">適用中のフィルタ:</p>
+                <div class="flex flex-wrap gap-2">
+                    {% if industry_filter %}
+                    <span class="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-sm">
+                        業界: {{ industry_filter }}
+                    </span>
+                    {% endif %}
+                    {% if heat_score_filter %}
+                    <span class="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-sm">
+                        温度感: {{ heat_score_filter }}
+                    </span>
+                    {% endif %}
+                    {% if employee_min or employee_max %}
+                    <span class="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-sm">
+                        従業員数: {% if employee_min %}{{ employee_min }}{% endif %}〜{% if employee_max %}{{ employee_max }}{% endif %}人
+                    </span>
+                    {% endif %}
+                    {% if last_contact_filter %}
+                    <span class="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-sm">
+                        最終接触: {% if last_contact_filter == '30days' %}30日以内
+                        {% elif last_contact_filter == '60days' %}60日以内
+                        {% elif last_contact_filter == '90days' %}90日以内
+                        {% elif last_contact_filter == 'over90days' %}90日以上
+                        {% elif last_contact_filter == 'never' %}未接触{% endif %}
+                    </span>
+                    {% endif %}
+                    {% if tag_filter %}
+                    <span class="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-sm">
+                        タグ: {{ tag_filter }}
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            
+            <div class="mt-4 flex gap-2">
+                <button type="submit" class="px-4 py-2 bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-200">
+                    適用
+                </button>
+                <button type="button" onclick="clearAdvancedFilters()" class="px-4 py-2 bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-medium rounded-lg transition duration-200">
+                    フィルタをクリア
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-x-auto -mx-4 sm:mx-0">
+    <table class="w-full">
+        <thead class="bg-gray-50 dark:bg-gray-700">
+            <tr>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">企業名</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">業種</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">所在地</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">操作</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+            {% if companies %}
+                {% for company in companies %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer" onclick="window.location='{{ url_for('view_company', id=company.id) }}'">
+                    <td class="px-6 py-4">
+                        <div class="font-medium text-gray-900 dark:text-white">{{ company.name }}</div>
+                    </td>
+                    <td class="px-6 py-4 text-gray-600 dark:text-gray-400">{{ company.industry or '-' }}</td>
+                    <td class="px-6 py-4 text-gray-600 dark:text-gray-400">{{ company.location or '-' }}</td>
+                    <td class="px-6 py-4" onclick="event.stopPropagation();">
+                        <div class="flex gap-2">
+                            <a href="{{ url_for('view_company', id=company.id) }}" class="px-3 py-1 text-sm bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded hover:bg-green-200 dark:hover:bg-green-800">
+                                詳細
+                            </a>
+                            <a href="{{ url_for('edit_company', id=company.id) }}" class="px-3 py-1 text-sm bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded hover:bg-blue-200 dark:hover:bg-blue-800">
+                                編集
+                            </a>
+                            <form method="POST" action="{{ url_for('delete_company', id=company.id) }}" onsubmit="return confirm('本当に削除しますか？');" class="inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <button type="submit" class="px-3 py-1 text-sm bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 rounded hover:bg-red-200 dark:hover:bg-red-800">
+                                    削除
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="4" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        企業が登録されていません
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+// Advanced filters toggle
+function toggleAdvancedFilters() {
+    const filters = document.getElementById('advancedFilters');
+    const icon = document.getElementById('filterToggleIcon');
+    
+    if (filters.classList.contains('hidden')) {
+        filters.classList.remove('hidden');
+        icon.textContent = '▲';
+    } else {
+        filters.classList.add('hidden');
+        icon.textContent = '▼';
+    }
+}
+
+// Clear advanced filters
+function clearAdvancedFilters() {
+    document.querySelector('select[name="industry"]').value = '';
+    document.querySelector('select[name="heat_score"]').value = '';
+    document.querySelector('input[name="employee_min"]').value = '';
+    document.querySelector('input[name="employee_max"]').value = '';
+    document.querySelector('select[name="last_contact"]').value = '';
+    document.querySelector('input[name="tag"]').value = '';
+}
+
+// Auto-expand filters if any advanced filter is active
+document.addEventListener('DOMContentLoaded', function() {
+    const hasAdvancedFilters = {{ 'true' if (industry_filter or heat_score_filter or employee_min or employee_max or last_contact_filter or tag_filter) else 'false' }};
+    if (hasAdvancedFilters) {
+        toggleAdvancedFilters();
+    }
+    
+    // ソート変更時に自動送信
+    const sortBySelect = document.querySelector('select[name="sort_by"]');
+    const sortOrderSelect = document.querySelector('select[name="sort_order"]');
+    
+    if (sortBySelect) {
+        sortBySelect.addEventListener('change', function() {
+            document.getElementById('companyFilterForm').submit();
+        });
+    }
+    
+    if (sortOrderSelect) {
+        sortOrderSelect.addEventListener('change', function() {
+            document.getElementById('companyFilterForm').submit();
+        });
+    }
+});
+</script>
+{% endblock %}

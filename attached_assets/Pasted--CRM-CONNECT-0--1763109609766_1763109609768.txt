@@ -1,0 +1,209 @@
+既存CRM「CONNECT+」を以下要件で安全に拡張してください。
+既存機能は壊さず、非破壊マイグレーション → 段階実装 → 動作確認ごとにコミットの順でお願いします。
+
+0) 前提・品質基準
+
+スタック：Flask + SQLAlchemy + Flask-Login + TailwindCSS + Chart.js（AI連携なし）
+
+DBは DATABASE_URL を優先。未設定は SQLite で動作するように。
+
+例外はJSONで返却、CSRF/認証/認可（@login_required）は維持。
+
+型ヒント・主要処理にコメント・READMEに手順追記。
+
+失敗時にグラフが落ちないよう、フロントは空データで描画＋トースト表示。
+
+1) 目的
+
+企業情報に「業界（ジャンル）」選択を追加（会社編集UI ＆ DB）
+
+ダッシュボード刷新
+
+「案件ステータス別」グラフを削除
+
+**業界別受注率ランキング（Bar）**を追加
+
+**業界×各種分析（ドリルダウンUI）**を追加：
+プルダウンで【業界】と【分析種別】を選んで表示
+
+分析種別：
+
+平均単価（＝受注案件の平均金額）
+
+受注率（WON / (WON+LOST)）
+
+受注理由（カテゴリ別件数）
+
+失注理由（カテゴリ別件数）
+
+業界はプルダウン単一選択（将来マルチ選択に拡張しやすい構造）
+
+2) DB拡張（非破壊）
+2.1 companies テーブルに業界カラムを追加
+
+industry TEXT NULL（インデックス付与）
+
+選択肢はまず大分類（下記の固定リストをサーバ側定数に保持）
+
+["製造業","小売・卸売","飲食・宿泊","IT・ソフトウェア",
+ "広告・メディア","建設・不動産","人材・教育","医療・福祉",
+ "金融・保険","物流・運輸","自治体・公共","専門サービス",
+ "エネルギー・インフラ","エンタメ・スポーツ","その他"]
+
+
+既存データはNULLで許容。UI側で「未設定」を表示し、編集時に選べるように。
+
+3) 会社編集UI（業界のプルダウン追加）
+
+画面：/companies/<id>/edit
+
+項目「業界（必須ではない）」を**<select>**で追加（上記リストを表示）。
+
+バリデーション：リスト外の値は拒否。空は許容（未設定）。
+
+4) 受注/失注理由の選択UI（プルダウン化の徹底）
+
+既存の受注/失注理由は、プルダウン（optgroup）＋自由記述の併用を維持。
+
+サーバ側に理由カテゴリ定数を保持（以前共有の候補でOK）。
+
+受注理由カテゴリ（例）：提案価値／コスト条件／関係性／競合比較／製品サービス／タイミング／マーケ起点／その他
+
+失注理由カテゴリ（例）：価格・予算／タイミング／競合負け／提案マッチ／関係性／顧客側都合／自社要因／その他
+
+5) ダッシュボード改修
+5.1 削除
+
+既存の**「案件ステータス別」グラフ**を完全に削除（テンプレ・JS・API呼び出し含む）。
+
+5.2 追加グラフ①：業界別受注率ランキング（Bar）
+
+エンドポイント：GET /api/analytics/industry/win_rate_ranking?from=&to=
+
+返却例：
+
+{ "data": [ {"industry":"IT・ソフトウェア","win_rate":0.42,"won":21,"lost":29}, ... ] }
+
+
+フロント：Barチャート（降順）。ツールチップに won/lost を表示。
+
+5.3 追加グラフ②：業界×各種分析（ドリルダウンUI）
+
+フィルタUI（上部に配置）
+
+業界：<select name="industry">（上記リスト＋「すべて」）
+
+分析種別：<select name="metric">（avg_amount | win_rate | win_reasons | loss_reasons）
+
+期間：今月/四半期/今年/カスタム（任意、あれば嬉しい）
+
+選択に応じて下記APIを叩き、1つの表示領域に描画（グラフタイプは自動切替）
+
+API
+
+平均単価：
+
+GET /api/analytics/industry/avg_amount?industry=&from=&to=
+
+返却：{ "industry":"IT・ソフトウェア", "avg_amount": 3850000, "count": 14 }
+
+受注率：
+
+GET /api/analytics/industry/win_rate?industry=&from=&to=
+
+返却：{ "industry":"製造業", "win_rate":0.31, "won":12, "lost":27 }
+
+受注理由（カテゴリ別件数）：
+
+GET /api/analytics/industry/win_reasons?industry=&from=&to=
+
+返却：{ "data":[{"category":"提案価値","count":8}, ...] }
+
+失注理由（カテゴリ別件数）：
+
+GET /api/analytics/industry/loss_reasons?industry=&from=&to=
+
+返却：{ "data":[{"category":"価格・予算","count":11}, ...] }
+
+industry が未指定・「すべて」の場合は全体集計。
+フロントは metric によって Bar（数値） / Doughnut（理由内訳） を切替。
+
+6) 集計ロジック（参考SQL方針／ORMでOK）
+
+受注率（ランキング）
+
+SELECT c.industry,
+       SUM(CASE WHEN d.status='WON'  THEN 1 ELSE 0 END)::float /
+       NULLIF(SUM(CASE WHEN d.status IN ('WON','LOST') THEN 1 ELSE 0 END),0) AS win_rate,
+       SUM(CASE WHEN d.status='WON'  THEN 1 ELSE 0 END) AS won,
+       SUM(CASE WHEN d.status='LOST' THEN 1 ELSE 0 END) AS lost
+FROM deals d JOIN companies c ON d.company_id=c.id
+WHERE d.closed_at BETWEEN :from AND :to
+GROUP BY c.industry
+ORDER BY win_rate DESC;
+
+
+平均単価（受注のみ）
+
+SELECT AVG(d.amount) AS avg_amount, COUNT(*) AS count
+FROM deals d JOIN companies c ON d.company_id=c.id
+WHERE d.status='WON'
+  AND (:industry IS NULL OR c.industry=:industry)
+  AND d.closed_at BETWEEN :from AND :to;
+
+
+理由内訳は win_reason_category / lost_reason_category を GROUP BY。
+
+パフォーマンス
+companies.industry、deals.status、deals.closed_at にインデックス。
+
+7) フロント（Chart.js）
+
+ランキング：Horizontal Bar（業界ラベル長対策）
+
+ドリルダウン：
+
+avg_amount/win_rate → Bar
+
+win_reasons/loss_reasons → Doughnut
+
+ラベルとデータ長の整合チェック、空配列でも落ちない実装。
+
+8) バリデーション・整合性
+
+会社編集：業界はリストの値のみ許容。空はOK。
+
+集計API：from/to の日付チェック。
+
+受注率は closed案件のみ（WON/LOST） を分母に採用。
+
+9) README更新（確認手順）
+
+マイグレーション適用（companies.industry 追加）
+
+会社編集画面で業界を設定
+
+ダッシュボードへ：
+
+業界別受注率ランキングが表示される
+
+フィルタで業界＆分析種別を選び、グラフが切り替わる
+
+期間変更でもAPIが再取得されグラフが更新される
+
+10) 期待成果物
+
+会社編集UIの業界プルダウン
+
+非破壊マイグレーション（companies.industry＋インデックス）
+
+ダッシュボード改修（旧「案件ステータス別」削除）
+
+新API群（ランキング＋業界×各種分析）
+
+Chart.js実装（空データ安全、選択式ドリルダウンUI）
+
+README更新
+
+最重要：既存機能を壊さないこと／API失敗時もUIが落ちないこと。
+疑義があれば仮実装＋TODOコメントで残してください。

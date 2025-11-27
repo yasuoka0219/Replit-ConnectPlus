@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}{% if deal %}案件編集{% else %}案件登録{% endif %} - CONNECT+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+            {% if deal %}案件編集{% else %}新規案件登録{% endif %}
+        </h1>
+        <p class="text-gray-600 dark:text-gray-400">案件情報を入力してください</p>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8 border border-gray-200 dark:border-gray-700">
+        <form method="POST" action="{% if deal %}{{ url_for('edit_deal', id=deal.id) }}{% else %}{{ url_for('create_deal') }}{% endif %}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="mb-6">
+                <label for="company_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">企業 *</label>
+                <select id="company_id" name="company_id" required 
+                        class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <option value="">選択してください</option>
+                    {% for company in companies %}
+                    <option value="{{ company.id }}" {% if deal and deal.company_id == company.id %}selected{% endif %}>
+                        {{ company.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="mb-6">
+                <label for="title" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">案件名 *</label>
+                <input type="text" id="title" name="title" value="{{ deal.title if deal else '' }}" required 
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+            
+            <div class="grid grid-cols-2 gap-6 mb-6">
+                <div>
+                    <label for="stage" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ステージ *</label>
+                    <select id="stage" name="stage" required 
+                            class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="初回接触" {% if deal and deal.stage == '初回接触' %}selected{% endif %}>初回接触</option>
+                        <option value="提案" {% if deal and deal.stage == '提案' %}selected{% endif %}>提案</option>
+                        <option value="見積" {% if deal and deal.stage == '見積' %}selected{% endif %}>見積</option>
+                        <option value="交渉" {% if deal and deal.stage == '交渉' %}selected{% endif %}>交渉</option>
+                        <option value="成約" {% if deal and deal.stage == '成約' %}selected{% endif %}>成約</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="status" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ステータス *</label>
+                    <select id="status" name="status" required 
+                            class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="OPEN" {% if deal and (deal.status == 'OPEN' or deal.status == '進行中') %}selected{% elif not deal %}selected{% endif %}>進行中</option>
+                        <option value="WON" {% if deal and (deal.status == 'WON' or deal.status == '受注' or deal.status == '成約') %}selected{% endif %}>受注</option>
+                        <option value="LOST" {% if deal and (deal.status == 'LOST' or deal.status == '失注') %}selected{% endif %}>失注</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Win/Loss Reason Fields (v2.6.0) -->
+            <div id="reasonFields" class="mb-6 hidden">
+                <div id="winReasonSection" class="hidden">
+                    <label for="win_reason_category" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">受注理由カテゴリ</label>
+                    <select id="win_reason_category" name="win_reason_category" 
+                            class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent mb-3">
+                        <option value="">選択してください（任意）</option>
+                        {% for reason in win_reasons %}
+                        <option value="{{ reason }}" {% if deal and deal.win_reason_category == reason %}selected{% endif %}>{{ reason }}</option>
+                        {% endfor %}
+                    </select>
+                    <label for="win_reason_detail" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">受注理由詳細</label>
+                    <textarea id="win_reason_detail" name="win_reason_detail" rows="3" 
+                              placeholder="具体的な受注理由を入力してください"
+                              class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">{{ deal.win_reason_detail if deal else '' }}</textarea>
+                </div>
+                
+                <div id="lostReasonSection" class="hidden">
+                    <label for="lost_reason_category" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">失注理由カテゴリ</label>
+                    <select id="lost_reason_category" name="lost_reason_category" 
+                            class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent mb-3">
+                        <option value="">選択してください（任意）</option>
+                        {% for reason in loss_reasons %}
+                        <option value="{{ reason }}" {% if deal and deal.lost_reason_category == reason %}selected{% endif %}>{{ reason }}</option>
+                        {% endfor %}
+                    </select>
+                    <label for="lost_reason_detail" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">失注理由詳細</label>
+                    <textarea id="lost_reason_detail" name="lost_reason_detail" rows="3" 
+                              placeholder="具体的な失注理由を入力してください"
+                              class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">{{ deal.lost_reason_detail if deal else '' }}</textarea>
+                </div>
+            </div>
+            
+            <div class="mb-6">
+                <label for="heat_score" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">温度感</label>
+                <select id="heat_score" name="heat_score" 
+                        class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <option value="A" {% if deal and deal.heat_score == 'A' %}selected{% elif not deal %}{% endif %}>A（最優先）</option>
+                    <option value="B" {% if deal and deal.heat_score == 'B' %}selected{% endif %}>B（高）</option>
+                    <option value="C" {% if deal and deal.heat_score == 'C' %}selected{% elif not deal %}selected{% endif %}>C（中）</option>
+                    <option value="ネタ" {% if deal and deal.heat_score == 'ネタ' %}selected{% endif %}>ネタ（見込み薄）</option>
+                </select>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-6 mb-6">
+                <div>
+                    <label for="team_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">チーム</label>
+                    <select id="team_id" name="team_id" 
+                            class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">チームを選択してください（任意）</option>
+                        {% for team in teams %}
+                        <option value="{{ team.id }}" {% if deal and deal.team_id == team.id %}selected{% elif not deal and current_user.team_id == team.id %}selected{% endif %}>
+                            {{ team.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="assignee_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">担当者</label>
+                    <select id="assignee_id" name="assignee_id" 
+                            class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">担当者を選択してください（任意）</option>
+                        {% for user in users %}
+                        <option value="{{ user.id }}" {% if deal and deal.assignee_id == user.id %}selected{% endif %}>
+                            {{ user.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-6 mb-6">
+                <div>
+                    <label for="amount" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">金額（円）</label>
+                    <input type="number" id="amount" name="amount" value="{{ deal.amount if deal else '0' }}" step="0.01" 
+                           class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+                
+                <div>
+                    <label for="appointment_date" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">アポイント日</label>
+                    <input type="date" id="appointment_date" name="appointment_date" value="{{ deal.appointment_date if deal and deal.appointment_date else '' }}" 
+                           class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+            </div>
+            
+            <div class="mb-6">
+                <label for="meeting_minutes" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">打合せ議事録</label>
+                <textarea id="meeting_minutes" name="meeting_minutes" rows="5" 
+                          placeholder="打合せの内容、決定事項、議論のポイントなどを記載してください"
+                          class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">{{ deal.meeting_minutes if deal else '' }}</textarea>
+            </div>
+            
+            <div class="mb-6">
+                <label for="next_action" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">NEXT ACTION</label>
+                <textarea id="next_action" name="next_action" rows="3" 
+                          placeholder="次回の打合せで取るべきアクション、アプローチ方法などを記載してください"
+                          class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">{{ deal.next_action if deal else '' }}</textarea>
+            </div>
+            
+            <div class="mb-6">
+                <label for="note" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">備考</label>
+                <textarea id="note" name="note" rows="4" 
+                          class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">{{ deal.note if deal else '' }}</textarea>
+            </div>
+            
+            <div class="flex gap-4">
+                <button type="submit" class="px-6 py-3 bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-200">
+                    {% if deal %}更新{% else %}登録{% endif %}
+                </button>
+                <a href="{{ url_for('deals') }}" class="px-6 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg transition duration-200">
+                    キャンセル
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Show/hide reason fields based on status
+const statusSelect = document.getElementById('status');
+const reasonFields = document.getElementById('reasonFields');
+const winReasonSection = document.getElementById('winReasonSection');
+const lostReasonSection = document.getElementById('lostReasonSection');
+
+function updateReasonFields() {
+    const status = statusSelect.value;
+    
+    if (status === 'WON') {
+        reasonFields.classList.remove('hidden');
+        winReasonSection.classList.remove('hidden');
+        lostReasonSection.classList.add('hidden');
+    } else if (status === 'LOST') {
+        reasonFields.classList.remove('hidden');
+        winReasonSection.classList.add('hidden');
+        lostReasonSection.classList.remove('hidden');
+    } else {
+        reasonFields.classList.add('hidden');
+        winReasonSection.classList.add('hidden');
+        lostReasonSection.classList.add('hidden');
+    }
+}
+
+// Initialize on page load
+updateReasonFields();
+
+// Update when status changes
+statusSelect.addEventListener('change', updateReasonFields);
+</script>
+{% endblock %}

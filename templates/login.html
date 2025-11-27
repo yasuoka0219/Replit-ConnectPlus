@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}ログイン - CONNECT+{% endblock %}
+
+{% block auth_content %}
+<div class="w-full max-w-md">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8">
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">CONNECT+</h1>
+            <p class="text-gray-600 dark:text-gray-400">CRMシステムにログイン</p>
+        </div>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="mb-4 p-4 rounded-lg {% if category == 'success' %}bg-green-100 text-green-800{% elif category == 'error' %}bg-red-100 text-red-800{% else %}bg-blue-100 text-blue-800{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <form method="POST" action="{{ url_for('login') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            {% if two_factor_required %}
+            <input type="hidden" name="email" value="{{ email or '' }}"/>
+            <div class="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <p class="text-sm text-blue-800 dark:text-blue-300 mb-2">
+                    <strong>2段階認証が有効です</strong><br>
+                    {% if two_factor_type == 'email' %}
+                    メールに送信された6桁のコードを入力してください。
+                    {% else %}
+                    認証アプリで6桁のコードを入力してください。
+                    {% endif %}
+                </p>
+            </div>
+            
+            {% if two_factor_type == 'email' %}
+            <div class="mb-4">
+                <button type="button" onclick="resendLoginEmailCode()" class="text-sm text-primary hover:text-indigo-700">
+                    コードを再送信する
+                </button>
+            </div>
+            {% endif %}
+            
+            <div class="mb-6">
+                <label for="two_factor_code" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">認証コード（6桁）</label>
+                <input type="text" id="two_factor_code" name="two_factor_code" required 
+                       pattern="[0-9]{6}" maxlength="6"
+                       placeholder="000000"
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-center text-2xl tracking-widest">
+                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    {% if two_factor_type == 'email' %}
+                    メールに記載されている6桁のコードを入力してください。
+                    {% else %}
+                    Google Authenticatorなどのアプリからコードを入力してください
+                    {% endif %}
+                </p>
+            </div>
+            {% else %}
+            <div class="mb-4">
+                <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">メールアドレス</label>
+                <input type="email" id="email" name="email" required value="{{ email or '' }}"
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+            
+            <div class="mb-6">
+                <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">パスワード</label>
+                <div class="relative">
+                    <input type="password" id="password" name="password" required 
+                           class="w-full px-4 py-3 pr-12 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <button type="button" onclick="togglePasswordVisibility()" 
+                            class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 focus:outline-none"
+                            id="passwordToggle">
+                        <svg id="eyeIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                        </svg>
+                        <svg id="eyeOffIcon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+            
+            <button type="submit" class="w-full px-4 py-3 bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-200">
+                {% if two_factor_required %}認証{% else %}ログイン{% endif %}
+            </button>
+        </form>
+        
+        <div class="mt-6 text-center">
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+                アカウントをお持ちでないですか？ 
+                <a href="{{ url_for('register') }}" class="text-primary hover:text-indigo-700 font-medium">新規登録</a>
+            </p>
+        </div>
+    </div>
+</div>
+
+<script>
+function togglePasswordVisibility() {
+    const passwordInput = document.getElementById('password');
+    const eyeIcon = document.getElementById('eyeIcon');
+    const eyeOffIcon = document.getElementById('eyeOffIcon');
+    
+    if (passwordInput.type === 'password') {
+        passwordInput.type = 'text';
+        eyeIcon.classList.add('hidden');
+        eyeOffIcon.classList.remove('hidden');
+    } else {
+        passwordInput.type = 'password';
+        eyeIcon.classList.remove('hidden');
+        eyeOffIcon.classList.add('hidden');
+    }
+}
+
+function resendLoginEmailCode() {
+    {% if two_factor_required and two_factor_type == 'email' %}
+    const email = '{{ email or "" }}';
+    const loginUrl = '{{ url_for("login") }}';
+    
+    fetch('/api/login/send-email-code', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({ email: email })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('認証コードを再送信しました。メールを確認してください。');
+            if (data.code_id) {
+                // Update code_id in form if needed
+                const form = document.querySelector('form[action="' + loginUrl + '"]');
+                if (form) {
+                    // Code_id is stored in session, no need to update form
+                }
+            }
+        } else {
+            alert('エラー: ' + (data.error || 'コードの再送信に失敗しました'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('エラーが発生しました');
+    });
+    {% endif %}
+}
+</script>
+{% endblock %}

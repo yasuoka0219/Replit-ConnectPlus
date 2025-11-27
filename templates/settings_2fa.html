@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block title %}2段階認証設定 - CONNECT+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-4xl mx-auto">
+        <div class="mb-6">
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">2段階認証設定</h1>
+            <p class="text-gray-600 dark:text-gray-400">セキュリティを強化するために2段階認証を有効にできます</p>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="mb-4 p-4 rounded-lg {% if category == 'success' %}bg-green-100 text-green-800{% elif category == 'error' %}bg-red-100 text-red-800{% else %}bg-blue-100 text-blue-800{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+            {% if two_factor_enabled %}
+            <!-- 2FA Enabled State -->
+            <div class="mb-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">2段階認証</h2>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">現在有効になっています</p>
+                    </div>
+                    <span class="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">有効</span>
+                </div>
+            </div>
+
+            <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">2段階認証を無効にする</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                    2段階認証を無効にするには、パスワードが必要です。
+                </p>
+                <button onclick="showDisableForm()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition duration-200">
+                    2段階認証を無効にする
+                </button>
+                
+                <div id="disableForm" class="hidden mt-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                    <form id="disable2FAForm">
+                        <div class="mb-4">
+                            <label for="disable_password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">パスワード</label>
+                            <input type="password" id="disable_password" name="password" required 
+                                   class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                        </div>
+                        <div class="flex gap-2">
+                            <button type="submit" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition duration-200">
+                                無効にする
+                            </button>
+                            <button type="button" onclick="hideDisableForm()" class="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 rounded-lg transition duration-200">
+                                キャンセル
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            {% if backup_codes %}
+            <div class="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">バックアップコード</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                    認証アプリにアクセスできない場合に使用できるバックアップコードです。安全な場所に保管してください。
+                </p>
+                <div class="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg font-mono text-sm">
+                    {% for code in backup_codes %}
+                    <div class="mb-2">{{ code }}</div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% else %}
+            <!-- 2FA Disabled State -->
+            <div class="mb-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">2段階認証</h2>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">現在無効になっています</p>
+                    </div>
+                    <span class="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm font-medium">無効</span>
+                </div>
+            </div>
+
+            <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">2段階認証を有効にする</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                    登録されているメールアドレスに6桁の認証コードが送信されます。
+                </p>
+                
+                <button onclick="setup2FA()" class="px-4 py-2 bg-primary hover:bg-indigo-700 text-white rounded-lg transition duration-200">
+                    2段階認証を設定する（メール認証）
+                </button>
+            </div>
+
+            <div id="setup2FA" class="{% if two_factor_type != 'email' %}hidden{% endif %} mt-6">
+                {% if two_factor_type == 'email' %}
+                <!-- Email-based 2FA -->
+                <div class="p-6 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                    <h4 class="text-lg font-medium text-gray-900 dark:text-white mb-4">メール認証コードの確認</h4>
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                        登録されているメールアドレス（{{ current_user.email }}）に認証コードを送信しました。<br>
+                        メールに記載されている6桁のコードを入力してください。
+                    </p>
+                    
+                    <form id="verify2FAForm">
+                        <input type="hidden" id="email_code_id" name="code_id" value="{{ email_code_id or '' }}">
+                        <div class="mb-4">
+                            <label for="verify_code" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">認証コード（6桁）</label>
+                            <input type="text" id="verify_code" name="code" required pattern="[0-9]{6}" maxlength="6"
+                                   placeholder="000000"
+                                   class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-center text-2xl tracking-widest">
+                        </div>
+                        <div class="mb-4">
+                            <button type="button" onclick="resendSetupEmailCode()" class="text-sm text-primary hover:text-indigo-700">
+                                コードを再送信する
+                            </button>
+                        </div>
+                        <button type="submit" class="px-4 py-2 bg-primary hover:bg-indigo-700 text-white rounded-lg transition duration-200">
+                            確認して有効にする
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="mt-6">
+            <a href="{{ url_for('settings') }}" class="text-primary hover:text-indigo-700">← 設定に戻る</a>
+        </div>
+    </div>
+</div>
+
+<script>
+function setup2FA() {
+    // Always use email-based 2FA
+    fetch('/api/2fa/setup', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({ type: 'email' })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => { throw err; });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            // Email-based 2FA
+            alert(data.message || '認証コードをメールで送信しました。メールに記載されている6桁のコードを入力してください。');
+            // Store code_id in hidden input if exists
+            const codeIdInput = document.getElementById('email_code_id');
+            if (codeIdInput && data.code_id) {
+                codeIdInput.value = data.code_id;
+            }
+            // Also store in window variable as backup
+            window.emailCodeId = data.code_id;
+            
+            // Show verification form
+            const setupDiv = document.getElementById('setup2FA');
+            if (setupDiv) {
+                setupDiv.classList.remove('hidden');
+            }
+            
+            // Reload to show setup form from server
+            location.reload();
+        } else {
+            alert('エラー: ' + (data.error || '2FAの設定に失敗しました'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('エラーが発生しました');
+    });
+}
+
+function showDisableForm() {
+    document.getElementById('disableForm').classList.remove('hidden');
+}
+
+function hideDisableForm() {
+    document.getElementById('disableForm').classList.add('hidden');
+}
+
+document.getElementById('verify2FAForm')?.addEventListener('submit', function(e) {
+    e.preventDefault();
+    const code = document.getElementById('verify_code').value;
+    
+    // Get code_id from hidden input or window variable
+    const codeIdInput = document.getElementById('email_code_id');
+    const codeId = codeIdInput ? codeIdInput.value : (window.emailCodeId || null);
+    
+    if (!codeId) {
+        alert('エラー: コードIDが見つかりません。新しいコードを送信してください。');
+        return;
+    }
+    
+    const body = { 
+        code: code,
+        code_id: codeId
+    };
+    
+    fetch('/api/2fa/verify', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify(body)
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => { throw err; });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            alert('2段階認証が有効になりました！');
+            location.reload();
+        } else {
+            alert('エラー: ' + (data.error || '認証コードが正しくありません'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('エラーが発生しました: ' + (error.error || error.message || '予期しないエラー'));
+    });
+});
+
+document.getElementById('disable2FAForm')?.addEventListener('submit', function(e) {
+    e.preventDefault();
+    const password = document.getElementById('disable_password').value;
+    
+    fetch('/api/2fa/disable', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({ password: password })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('2段階認証が無効になりました');
+            location.reload();
+        } else {
+            alert('エラー: ' + (data.error || '無効化に失敗しました'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('エラーが発生しました');
+    });
+});
+
+function resendSetupEmailCode() {
+    fetch('/api/2fa/setup', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({ type: 'email' })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => { throw err; });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            alert(data.message || '認証コードを再送信しました。メールを確認してください。');
+            // Update code_id in hidden input
+            const codeIdInput = document.getElementById('email_code_id');
+            if (codeIdInput && data.code_id) {
+                codeIdInput.value = data.code_id;
+            }
+            // Also update window variable
+            window.emailCodeId = data.code_id;
+            // Reload to update the page
+            location.reload();
+        } else {
+            alert('エラー: ' + (data.error || 'コードの再送信に失敗しました'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('エラーが発生しました: ' + (error.error || error.message || '予期しないエラー'));
+    });
+}
+</script>
+{% endblock %}
+

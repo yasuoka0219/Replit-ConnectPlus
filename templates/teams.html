@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+
+{% block title %}チーム管理 - CONNECT+{% endblock %}
+
+{% block content %}
+<div class="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+        <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">チーム管理</h1>
+        <p class="text-sm sm:text-base text-gray-600 dark:text-gray-400">チームとメンバーを管理</p>
+    </div>
+    <button onclick="openCreateTeamModal()" class="w-full sm:w-auto px-6 py-3 text-base text-center bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-200">
+        + 新規チーム
+    </button>
+</div>
+
+<!-- チーム一覧 -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+    {% for team in teams %}
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div class="flex items-start justify-between mb-4">
+            <div class="flex-1">
+                <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-1">{{ team.name }}</h3>
+                {% if team.description %}
+                <p class="text-sm text-gray-600 dark:text-gray-400">{{ team.description }}</p>
+                {% endif %}
+            </div>
+            {% if team.color %}
+            <div class="w-4 h-4 rounded-full" style="background-color: {{ team.color }};"></div>
+            {% endif %}
+        </div>
+        
+        <div class="mb-4">
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                メンバー数: <span class="font-medium text-gray-900 dark:text-white">{{ team.users|length }}人</span>
+            </p>
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+                案件数: <span class="font-medium text-gray-900 dark:text-white">{{ team.deals|length }}件</span>
+            </p>
+        </div>
+        
+        <div class="flex flex-wrap gap-2">
+            <button onclick="openDealsModal({{ team.id }}, '{{ team.name }}')" 
+                    class="flex-1 px-4 py-2 text-sm font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded hover:bg-green-200 dark:hover:bg-green-800">
+                案件
+            </button>
+            <button onclick="openEditTeamModal({{ team.id }}, '{{ team.name }}', '{{ team.description or '' }}', '{{ team.color or '' }}')" 
+                    class="flex-1 px-4 py-2 text-sm font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded hover:bg-blue-200 dark:hover:bg-blue-800">
+                編集
+            </button>
+            <button onclick="openMembersModal({{ team.id }}, '{{ team.name }}')" 
+                    class="flex-1 px-4 py-2 text-sm font-medium bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 rounded hover:bg-purple-200 dark:hover:bg-purple-800">
+                メンバー
+            </button>
+            {% if has_role(current_user, 'admin') and team.name != 'メインチーム' %}
+            <form method="POST" action="{{ url_for('delete_team', id=team.id) }}" onsubmit="return confirm('本当にこのチームを削除しますか？メンバーはデフォルトチームに移動されます。');" class="inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <button type="submit" class="px-4 py-2 text-sm font-medium bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 rounded hover:bg-red-200 dark:hover:bg-red-800">
+                    削除
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- チーム作成モーダル -->
+<div id="createTeamModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-md mx-4">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white">新規チーム作成</h3>
+            <button onclick="closeCreateTeamModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <form method="POST" action="{{ url_for('create_team') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">チーム名 *</label>
+                <input type="text" name="name" required 
+                       class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+            
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">説明</label>
+                <textarea name="description" rows="3" 
+                          class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"></textarea>
+            </div>
+            
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">カラー（カラーコード）</label>
+                <input type="text" name="color" placeholder="#6366f1" 
+                       class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+            
+            <div class="flex gap-3">
+                <button type="submit" class="flex-1 px-4 py-2 bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-200">
+                    作成
+                </button>
+                <button type="button" onclick="closeCreateTeamModal()" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg transition duration-200">
+                    キャンセル
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- チーム編集モーダル -->
+<div id="editTeamModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-md mx-4">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white">チーム編集</h3>
+            <button onclick="closeEditTeamModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <form id="editTeamForm" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">チーム名 *</label>
+                <input type="text" name="name" id="editTeamName" required 
+                       class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+            
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">説明</label>
+                <textarea name="description" id="editTeamDescription" rows="3" 
+                          class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"></textarea>
+            </div>
+            
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">カラー（カラーコード）</label>
+                <input type="text" name="color" id="editTeamColor" placeholder="#6366f1" 
+                       class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+            
+            <div class="flex gap-3">
+                <button type="submit" class="flex-1 px-4 py-2 bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-200">
+                    更新
+                </button>
+                <button type="button" onclick="closeEditTeamModal()" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg transition duration-200">
+                    キャンセル
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- メンバー管理モーダル -->
+<div id="membersModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white" id="membersModalTitle">メンバー管理</h3>
+            <button onclick="closeMembersModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <form id="membersForm" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="mb-4">
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">チームに所属させるメンバーを選択してください：</p>
+                <div class="space-y-2 max-h-96 overflow-y-auto">
+                    {% for user in users %}
+                    <label class="flex items-center p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
+                        <input type="checkbox" name="members" value="{{ user.id }}" 
+                               class="w-4 h-4 text-primary focus:ring-primary border-gray-300 rounded"
+                               data-team-id="{{ user.team_id or '' }}">
+                        <div class="ml-3 flex-1">
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium text-gray-900 dark:text-white">{{ user.name }}</span>
+                                <span class="px-2 py-1 text-xs font-medium rounded-full
+                                    {% if user.role == 'admin' %}bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200
+                                    {% elif user.role == 'lead' %}bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200
+                                    {% elif user.role == 'member' %}bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200
+                                    {% else %}bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200{% endif %}">
+                                    {% if user.role == 'admin' %}管理者
+                                    {% elif user.role == 'lead' %}リーダー
+                                    {% elif user.role == 'member' %}メンバー
+                                    {% elif user.role == 'viewer' %}閲覧のみ
+                                    {% else %}{{ user.role }}{% endif %}
+                                </span>
+                            </div>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ user.email }}</p>
+                        </div>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <div class="flex gap-3">
+                <button type="submit" class="flex-1 px-4 py-2 bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-200">
+                    保存
+                </button>
+                <button type="button" onclick="closeMembersModal()" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg transition duration-200">
+                    キャンセル
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 案件一覧モーダル -->
+<div id="dealsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white" id="dealsModalTitle">案件一覧</h3>
+            <button onclick="closeDealsModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <div id="dealsList" class="space-y-3">
+            <!-- 案件一覧がここに表示されます -->
+        </div>
+        
+        <div class="mt-6 flex justify-end">
+            <button onclick="closeDealsModal()" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg transition duration-200">
+                閉じる
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentTeamId = null;
+
+function openCreateTeamModal() {
+    document.getElementById('createTeamModal').classList.remove('hidden');
+    document.getElementById('createTeamModal').classList.add('flex');
+}
+
+function closeCreateTeamModal() {
+    document.getElementById('createTeamModal').classList.add('hidden');
+    document.getElementById('createTeamModal').classList.remove('flex');
+}
+
+function openEditTeamModal(teamId, name, description, color) {
+    currentTeamId = teamId;
+    document.getElementById('editTeamName').value = name;
+    document.getElementById('editTeamDescription').value = description || '';
+    document.getElementById('editTeamColor').value = color || '';
+    document.getElementById('editTeamForm').action = `/teams/${teamId}/edit`;
+    document.getElementById('editTeamModal').classList.remove('hidden');
+    document.getElementById('editTeamModal').classList.add('flex');
+}
+
+function closeEditTeamModal() {
+    document.getElementById('editTeamModal').classList.add('hidden');
+    document.getElementById('editTeamModal').classList.remove('flex');
+    currentTeamId = null;
+}
+
+function openMembersModal(teamId, teamName) {
+    currentTeamId = teamId;
+    document.getElementById('membersModalTitle').textContent = `${teamName} - メンバー管理`;
+    document.getElementById('membersForm').action = `/teams/${teamId}/members`;
+    
+    // 現在のチームメンバーをチェック
+    const checkboxes = document.querySelectorAll('input[name="members"]');
+    checkboxes.forEach(checkbox => {
+        const userTeamId = checkbox.getAttribute('data-team-id');
+        checkbox.checked = (userTeamId && parseInt(userTeamId) === teamId);
+    });
+    
+    document.getElementById('membersModal').classList.remove('hidden');
+    document.getElementById('membersModal').classList.add('flex');
+}
+
+function closeMembersModal() {
+    document.getElementById('membersModal').classList.add('hidden');
+    document.getElementById('membersModal').classList.remove('flex');
+    currentTeamId = null;
+}
+
+function openDealsModal(teamId, teamName) {
+    currentTeamId = teamId;
+    document.getElementById('dealsModalTitle').textContent = `${teamName} - 案件一覧`;
+    
+    // 案件一覧を取得して表示
+    fetch(`/api/teams/${teamId}/deals`)
+        .then(response => response.json())
+        .then(data => {
+            const dealsList = document.getElementById('dealsList');
+            if (data.success && data.deals && data.deals.length > 0) {
+                dealsList.innerHTML = data.deals.map(deal => `
+                    <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <a href="/deals/${deal.id}" class="text-lg font-semibold text-primary hover:underline">
+                                        ${deal.title}
+                                    </a>
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full ${
+                                        deal.status === 'OPEN' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
+                                        deal.status === 'WON' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                                        'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                                    }">
+                                        ${deal.status === 'OPEN' ? '進行中' : deal.status === 'WON' ? '受注' : '失注'}
+                                    </span>
+                                </div>
+                                <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">
+                                    企業: <span class="font-medium">${deal.company_name || '不明'}</span>
+                                </p>
+                                <div class="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+                                    <span>ステージ: <span class="font-medium">${deal.stage || '-'}</span></span>
+                                    <span>金額: <span class="font-medium">¥${deal.amount ? deal.amount.toLocaleString() : '0'}</span></span>
+                                    ${deal.assignee_name ? `<span>担当者: <span class="font-medium">${deal.assignee_name}</span></span>` : ''}
+                                </div>
+                            </div>
+                            <a href="/deals/${deal.id}" class="ml-4 px-3 py-1 text-sm font-medium bg-primary hover:bg-indigo-700 text-white rounded transition duration-200">
+                                詳細
+                            </a>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                dealsList.innerHTML = '<p class="text-center text-gray-500 dark:text-gray-400 py-8">このチームに紐づく案件はありません。</p>';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('dealsList').innerHTML = '<p class="text-center text-red-500 py-8">案件の取得に失敗しました。</p>';
+        });
+    
+    document.getElementById('dealsModal').classList.remove('hidden');
+    document.getElementById('dealsModal').classList.add('flex');
+}
+
+function closeDealsModal() {
+    document.getElementById('dealsModal').classList.add('hidden');
+    document.getElementById('dealsModal').classList.remove('flex');
+    currentTeamId = null;
+}
+
+// ESCキーでモーダルを閉じる
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closeCreateTeamModal();
+        closeEditTeamModal();
+        closeMembersModal();
+        closeDealsModal();
+    }
+});
+</script>
+{% endblock %}
+

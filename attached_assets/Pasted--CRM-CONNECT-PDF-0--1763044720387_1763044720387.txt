@@ -1,0 +1,145 @@
+以下の要件で、既存CRM「CONNECT+」に見積書・請求書のPDF生成機能を追加してください。
+外部サービス連携は不要。破壊的変更は避け、段階的に実装→動作確認→コミットしてください。
+
+0) 前提・品質基準
+
+スタック：Flask + SQLAlchemy + Jinja2 + fpdf2（純PythonのPDF生成）
+
+目的：画面から入力→PDFを即時生成→ブラウザでダウンロード
+
+ストレージ保存は必須ではありません（都度生成でOK）。
+
+例外時はJSONでエラー返却。CSRF/認証（@login_required）は維持。
+
+日本語フォント（NotoSansCJK等）を同梱し、日本語が崩れないようにする。
+
+1) 依存関係
+
+requirements.txt に追記：
+
+fpdf2
+
+
+（必要なら Pillow も。WeasyPrintやwkhtmltopdfは使いません）
+
+2) データモデル（非破壊追加）
+
+**見積（quotes / quote_items）・請求（invoices / invoice_items）**を最小構成で追加。
+
+quotes: id, company_id, contact_id, quote_no, issue_date, expire_date, subject, currency, tax_rate, subtotal, tax_amount, total, notes, status('draft'|'issued')
+
+quote_items: id, quote_id, item_name, description, qty, unit_price, tax_rate, line_total
+
+invoices: id, company_id, contact_id, invoice_no, issue_date, due_date, subject, currency, tax_rate, subtotal, tax_amount, total, notes, status('draft'|'issued'|'paid')
+
+invoice_items: id, invoice_id, item_name, description, qty, unit_price, tax_rate, line_total
+
+org_profile（既存なければ追加）: name, address, tel, email, logo_path(optional), invoice_registration_number(optional), bank_info
+
+採番：quote_no / invoice_no は YYYY-#### 形式で一意。年が変わればカウントリセット。
+（実装はutils/numbering.py などに分離）
+
+3) 画面
+
+見積一覧・詳細・編集・「PDFを発行」ボタン
+
+請求一覧・詳細・編集・「PDFを発行」ボタン
+
+明細は行追加/削除できるフォーム（数量・単価から小計→税→合計を自動計算）
+
+4) PDF生成（fpdf2）
+
+日本語フォント（例：static/fonts/NotoSansCJKjp-Regular.ttf）を読み込み
+
+余白・罫線・表（品目表）・小計／消費税／合計を整形
+
+見積書に 有効期限・支払条件・納期・納入場所（notesに集約でも可）
+
+請求書に 請求日・支払期日・通し番号／（任意）適格請求書登録番号
+
+角印PNGを任意差し込み可能（static/img/seal.png があれば右下に配置）
+
+出力：application/pdf を send_file or send_bytes で返却（ダウンロード）
+
+5) エンドポイント
+
+POST /api/quotes（作成）/ PUT /api/quotes/<id>（更新）
+
+POST /api/quotes/<id>/issue（採番＋合計再計算＋status=issued）
+
+GET /api/quotes/<id>/pdf（PDF生成して即ダウンロード）
+
+POST /api/invoices / PUT /api/invoices/<id>
+
+POST /api/invoices/<id>/issue（採番＋status=issued）
+
+GET /api/invoices/<id>/pdf（PDF生成して即ダウンロード）
+
+注意：PDFはサーバに永続保存しない（リクエスト時に都度生成）
+→ Replitの揮発性に左右されず、実装も軽量。
+
+6) 金額計算ロジック
+
+行ごと：line_total = qty * unit_price（税込/税抜運用はUIで固定。ここでは税抜想定）
+
+小計：subtotal = sum(line_total)
+
+税額：tax_amount = round(subtotal * tax_rate)（10%等。軽減対応は将来拡張）
+
+合計：total = subtotal + tax_amount
+
+issued時に再計算してDBへ確定値を保存。
+
+7) 日本向けレイアウト最低要件
+
+書類タイトル（見積書／請求書）
+
+通し番号（quote_no / invoice_no）
+
+発行日（請求は請求日）／見積は有効期限
+
+宛名（会社名・部署・担当者）
+
+明細表：品目／数量／単価／金額
+
+小計／消費税（率明記）／合計
+
+自社情報（名称・住所・TEL・メール・（任意）登録番号・振込先）
+
+代表/担当者名欄＋（任意）印影
+
+8) サンプルPDFの体裁（指示）
+
+余白20mm、軽い罫線、見出しはやや太字
+
+テーブルはヘッダ行を薄塗り背景
+
+合計は右下で強調（太字・大きめフォント）
+
+フッタに「本見積の有効期限は◯◯まで」など追記可能
+
+9) README追記（動作確認）
+
+依存関係インストール（pip install -r requirements.txt）
+
+管理画面から会社・見積または請求を作成し明細を入力
+
+「発行」→「PDFダウンロード」を押下
+
+日本語が正しく表示されること（文字化けなし）
+
+金額計算・通し番号が正しいことを確認
+
+10) 期待成果物
+
+モデル・フォーム・一覧/詳細画面
+
+「発行」ボタンとAPI
+
+fpdf2による見積書・請求書PDFの即時ダウンロード
+
+日本語フォント同梱＆文字化けなし
+
+README更新（セットアップ・確認手順）
+
+最重要：既存機能を壊さない／例外は握りつぶさずユーザーに分かるメッセージで返す

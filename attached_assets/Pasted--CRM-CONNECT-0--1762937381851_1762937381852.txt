@@ -1,0 +1,275 @@
+以下の要件で既存のCRM「CONNECT+」を安全に拡張してください。
+既存コードを最大限活かし、破壊的変更は避け、段階的に動作確認→コミットを行ってください。
+
+
+
+
+0) 前提・品質基準
+
+
+•	既存スタック：Flask / SQLAlchemy / Flask-Login / TailwindCSS / Chart.js（AI連携は不要）
+•	DB接続：DATABASE_URL 環境変数を優先。未設定時は SQLite を自動使用。
+•	例外処理・入力バリデーション・認証/認可（@login_required）を実装。
+•	非破壊（nullable追加・デフォルト付与・CHECK制約）でマイグレーション。
+•	重要箇所にコメント、型ヒント（mypy互換）を付与。
+•	画面はレスポンシブ、アクセシビリティ（label, aria）に配慮。
+•	すべて完了後、READMEにセットアップ＆テスト手順を追記。
+
+
+
+
+
+1) 目的（今回の追加機能）
+
+
+1.	案件クローズ時に受注/失注理由を選択式＋自由記述で登録できるUI/APIを実装
+2.	受注率・失注率と理由カテゴリ別/理由別の件数集計をダッシュボードで可視化
+
+
+
+
+
+2) データモデル拡張（非破壊・マイグレーション）
+
+
+deals テーブルに以下カラムを追加してください（既存データは保持）：
+
+•	status TEXT（既存） … 値は OPEN | WON | LOST を想定
+•	win_reason_category TEXT NULL
+•	win_reason_detail   TEXT NULL  （自由記述）
+•	lost_reason_category TEXT NULL
+•	lost_reason_detail   TEXT NULL  （自由記述）
+•	closed_at DATETIME NULL（受注/失注確定時にセット）
+
+
+CHECK制約（DB対応可能なら）
+
+•	status IN (‘OPEN’,‘WON’,‘LOST’)
+•	受注時（WON）は win_reason_category のみ任意設定、失注時（LOST）は lost_reason_category のみ任意設定（アプリ側で整合性チェック）
+
+
+インデックス
+
+•	(status, closed_at)、(win_reason_category)、(lost_reason_category)
+
+
+SQLiteの制約差異に注意。難しい場合はアプリ層でバリデーションしてください。
+
+
+
+
+3) 選択肢マスタ（サーバ側の定数 or JSON）
+
+
+
+3.1 受注理由カテゴリ（Win Reasons）
+
+
+•	提案価値：提案が課題に合致 / 優位性が明確 / 顧客理解が深い
+•	コスト条件：コストパフォーマンス / 条件（納期・支払）が柔軟
+•	関係性：担当対応を評価 / 過去取引の信頼 / 紹介・口コミ
+•	競合比較：機能優位 / サポート体制優位
+•	製品サービス：品質・性能を高評価 / カスタマイズ性 / 導入実績が豊富
+•	タイミング：導入時期が一致 / 予算化タイミングが合致
+•	マーケ起点：展示会/セミナー効果 / Web/広告から好印象
+•	その他：その他（自由記述必須にしても良い）
+
+
+
+3.2 失注理由カテゴリ（Loss Reasons）
+
+
+•	価格・予算：価格が高い / 予算確保不可/削減
+•	タイミング：検討延期 / 他社決定が先行
+•	競合負け：条件で劣後 / 機能で劣後 / 既存ベンダー継続
+•	提案マッチ：課題と不一致 / 期待とのギャップ / 顧客理解不足
+•	関係性：キーマン関係構築不足 / 社内稟議通過不可
+•	顧客側都合：検討中止 / 組織変更・予算凍結 / 担当者退職/異動
+•	自社要因：提案スピード遅延 / フォロー不足 / 見積・社内対応遅延
+•	その他：その他（自由記述必須にしても良い）
+
+
+将来的にDBの正規化（理由マスタテーブル）も可能ですが、今回は選択肢の安定運用を優先し、アプリ側定義でOK。
+
+
+
+
+4) UI/UX実装（案件クローズ用モーダル）
+
+
+•	対象：案件一覧・詳細画面に「クローズ」ボタンを追加
+•	クリックでモーダル表示：
+
+o	トグル（Radio）：「受注（WON）」/「失注（LOST）」
+o	選択肢（<select>）：上記カテゴリ（optgroup可）
+o	自由記述（<textarea>）：任意（「その他」選択時は必須）
+o	保存ボタン：二重送信防止、送信中インジケータ
+•	
+•	保存成功後：モーダル閉じ → トーストで「保存しました」 → リスト再読込
+
+
+Tailwind例（概略）
+
+•	モーダル：fixed inset-0 flex items-center justify-center bg-black/40
+•	パネル：bg-white rounded-xl p-6 w-full max-w-lg
+•	アクセシビリティ：role="dialog" aria-modal="true" aria-labelledby="closeDealTitle"
+
+
+
+
+
+5) APIエンドポイント（JSON）
+
+
+•	PUT /api/deals/<int:deal_id>/close
+リクエスト例：
+
+{
+  "status": "WON",
+  "reason_category": "提案が課題に合致",
+  "reason_detail": "現行KPIと効果測定の設計が刺さった"
+}
+
+•	バリデーション：
+
+o	status は WON または LOST
+o	status='WON' の場合は win_reason_category をセット、LOST の場合は lost_reason_category をセット
+o	closed_at = now() を自動付与
+o	失敗時は 400/404/500 のJSONエラーで返却（メッセージ付き）
+•	
+•	GET /api/deals/<int:deal_id>：詳細（理由情報含む）
+•	既存の PATCH /api/deals/<id> がある場合は整合性に注意（クローズは専用APIを推奨）
+
+
+
+
+
+6) 集計API（ダッシュボード用）
+
+
+•	GET /api/analytics/win_rate?from=YYYY-MM-DD&to=YYYY-MM-DD
+
+o	返却：{ "win_rate": 0.43, "won": 12, "lost": 16, "total_closed": 28 }
+•	
+•	GET /api/analytics/win_reasons?from=...&to=...
+
+o	返却：理由カテゴリ別件数（降順）
+•	
+
+{ "data": [ {"category":"提案が課題に合致","count":8}, ... ] }
+
+•	
+
+•	GET /api/analytics/loss_reasons?from=...&to=...
+
+o	返却：理由カテゴリ別件数（降順）
+•	
+•	GET /api/analytics/reasons_top5?from=...&to=...
+
+o	返却：受注理由TOP5と失注理由TOP5
+•	
+
+
+期間・担当者・業種などのフィルタ（owner, industry, company_id）はクエリパラメータで可。
+
+サンプルSQL（方針）
+-- 受注率
+SELECT
+  SUM(CASE WHEN status='WON'  THEN 1 ELSE 0 END) AS won,
+  SUM(CASE WHEN status='LOST' THEN 1 ELSE 0 END) AS lost
+FROM deals
+WHERE closed_at BETWEEN :from AND :to;
+
+-- 受注理由（カテゴリ別）
+SELECT win_reason_category AS category, COUNT(*) AS count
+FROM deals
+WHERE status='WON' AND closed_at BETWEEN :from AND :to
+GROUP BY win_reason_category
+ORDER BY count DESC;
+
+-- 失注理由（カテゴリ別）
+SELECT lost_reason_category AS category, COUNT(*) AS count
+FROM deals
+WHERE status='LOST' AND closed_at BETWEEN :from AND :to
+GROUP BY lost_reason_category
+ORDER BY count DESC;
+
+
+
+
+7) ダッシュボード（Chart.js）
+
+
+/dashboard に以下を追加または新規ページ作成：
+
+•	Stat Cards：
+
+o	受注率（%表示）／won／lost（期間フィルタ対応）
+•	
+•	Bar（受注理由カテゴリ別件数）
+•	Bar（失注理由カテゴリ別件数）
+•	（任意）Line：月次の受注率推移
+
+
+フロント注意点
+
+•	API失敗時は空データで描画＋トースト表示
+•	labels と data の長さ不一致に注意
+•	期間フィルタUI（今月/四半期/今年/カスタム）で再取得
+
+
+
+
+
+8) バリデーション・整合性
+
+
+•	status='OPEN' の案件に理由を保存しない（API側でブロック）
+•	status='WON' の場合は lost_reason_* をクリア（逆も同様）
+•	「その他」選択時は *_reason_detail 必須
+•	CSRF保護・ログイン必須・権限チェック（所属ユーザのみ更新可）
+
+
+
+
+
+9) シードデータ（開発確認用）
+
+
+seed.py を更新し、ランダムに WON/LOST と理由カテゴリを付与した案件を複数投入。
+→ ダッシュボードでグラフが描画されることを即確認できるようにする。
+
+
+
+
+10) README更新（テスト手順）
+
+
+1.	依存関係インストール
+2.	マイグレーション実行（SQLite安全策も記載）
+3.	seed.py 実行でダミーデータ投入
+4.	サーバ起動 → /deals でクローズモーダル確認
+5.	/dashboard で受注率・理由別グラフ確認
+6.	代表的な異常系（未入力、その他時の自由記述なし等）の期待エラー確認
+
+
+
+
+
+11) 納品物の期待
+
+
+•	モーダルを含む案件クローズUI
+•	理由選択肢実装（サーバ側定義 or JSON）＋自由記述欄
+•	非破壊マイグレーション済のモデル更新
+•	集計API（受注率・理由カテゴリ別件数）
+•	ダッシュボードのグラフ（受注/失注理由）
+•	READMEの更新（セットアップ・テスト手順）
+
+
+最重要：既存機能を壊さないこと／エラーを残さないこと。
+疑義がある場合は仮実装＋TODOコメントで残し、後続で修正可能な形にしてください。
+
+
+
+以上です。上記の順序と基準で、安全に拡張してください。

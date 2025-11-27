@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}請求管理 - CONNECT+{% endblock %}
+
+{% block content %}
+<div class="mb-8 flex items-center justify-between">
+    <div>
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">請求管理</h1>
+        <p class="text-gray-600 dark:text-gray-400">請求書を管理</p>
+    </div>
+    <a href="{{ url_for('new_invoice') }}" class="px-6 py-3 bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-200">
+        + 新規請求
+    </a>
+</div>
+
+<div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-x-auto">
+    <table class="w-full table-auto">
+        <thead class="bg-gray-50 dark:bg-gray-700">
+            <tr>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">請求番号</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">企業名</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">件名</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">発行日</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">支払期限</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">合計金額</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">ステータス</th>
+                <th class="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">操作</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+            {% if invoices %}
+                {% for invoice in invoices %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if invoice.invoice_no %}
+                        <span class="font-mono text-sm text-gray-900 dark:text-white">{{ invoice.invoice_no }}</span>
+                        {% else %}
+                        <span class="text-gray-400 text-sm">未発行</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <a href="{{ url_for('view_company', id=invoice.company.id) }}" class="text-primary hover:underline">
+                            {{ invoice.company.name }}
+                        </a>
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="text-sm text-gray-900 dark:text-white max-w-xs truncate" title="{{ invoice.subject }}">
+                            {{ invoice.subject }}
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
+                        {{ invoice.issue_date.strftime('%Y-%m-%d') }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if invoice.due_date %}
+                        <span class="text-sm text-gray-700 dark:text-gray-300">
+                            {{ invoice.due_date.strftime('%Y-%m-%d') }}
+                        </span>
+                        {% else %}
+                        <span class="text-gray-400 text-sm">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-white font-medium">
+                        ¥{{ "{:,.0f}".format(invoice.total) }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-3 py-1 text-xs font-medium rounded-full whitespace-nowrap
+                            {% if invoice.status == '下書き' %}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200
+                            {% elif invoice.status == '発行済み' %}bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200
+                            {% elif invoice.status == '入金確認' %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200
+                            {% endif %}">
+                            {{ invoice.status }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex gap-2">
+                            <a href="{{ url_for('view_invoice', id=invoice.id) }}" class="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded whitespace-nowrap">詳細</a>
+                            {% if invoice.status == '下書き' %}
+                            <a href="{{ url_for('edit_invoice', id=invoice.id) }}" class="px-3 py-1.5 text-sm bg-gray-600 hover:bg-gray-700 text-white rounded whitespace-nowrap">編集</a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="8" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                        請求がありません。新規請求ボタンから作成してください。
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

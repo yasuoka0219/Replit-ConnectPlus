@@ -1,0 +1,868 @@
+{% extends "base.html" %}
+
+{% block title %}ダッシュボード - CONNECT+{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-4">
+        <div>
+            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">ダッシュボード</h1>
+            <p class="text-sm sm:text-base text-gray-600 dark:text-gray-400">ビジネスの概要を確認</p>
+        </div>
+        
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+            <select id="period-select" class="w-full sm:w-auto px-4 py-3 text-base rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                <option value="current_month">今月</option>
+                <option value="last_month">先月</option>
+                <option value="current_year">今年</option>
+                <option value="custom">カスタム期間</option>
+            </select>
+            
+            <div id="custom-date-range" class="hidden flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <input type="date" id="start-date" class="flex-1 sm:flex-initial px-3 py-3 text-base rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                <span class="text-gray-500 dark:text-gray-400 text-center sm:text-left">〜</span>
+                <input type="date" id="end-date" class="flex-1 sm:flex-initial px-3 py-3 text-base rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                <button id="apply-custom-range" class="px-4 py-3 text-base bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-200">
+                    適用
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
+        <div class="flex items-start justify-between">
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">企業数</p>
+                <p class="text-3xl font-bold text-gray-900 dark:text-white leading-tight">{{ total_companies }}</p>
+            </div>
+            <div class="ml-4 flex-shrink-0 p-3 bg-blue-100 dark:bg-blue-900 rounded-lg">
+                <svg class="w-8 h-8 text-blue-600 dark:text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                </svg>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
+        <div class="flex items-start justify-between">
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">連絡先</p>
+                <p class="text-3xl font-bold text-gray-900 dark:text-white leading-tight">{{ total_contacts }}</p>
+            </div>
+            <div class="ml-4 flex-shrink-0 p-3 bg-green-100 dark:bg-green-900 rounded-lg">
+                <svg class="w-8 h-8 text-green-600 dark:text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                </svg>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
+        <div class="flex items-start justify-between">
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">案件数</p>
+                <p class="text-3xl font-bold text-gray-900 dark:text-white leading-tight">{{ total_deals }}</p>
+            </div>
+            <div class="ml-4 flex-shrink-0 p-3 bg-purple-100 dark:bg-purple-900 rounded-lg">
+                <svg class="w-8 h-8 text-purple-600 dark:text-purple-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
+        <div class="flex items-start justify-between">
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">総額</p>
+                <p class="text-3xl font-bold text-gray-900 dark:text-white leading-tight">¥{{ "{:,.0f}".format(total_amount) }}</p>
+            </div>
+            <div class="ml-4 flex-shrink-0 p-3 bg-yellow-100 dark:bg-yellow-900 rounded-lg">
+                <svg class="w-8 h-8 text-yellow-600 dark:text-yellow-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <div class="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
+        <div class="flex justify-between items-start mb-4">
+            <div class="flex-1 min-w-0">
+                <p class="text-green-100 text-sm font-medium mb-1">今月の売上</p>
+                <p class="text-3xl font-bold leading-tight" id="current-revenue">¥0</p>
+            </div>
+            <div class="ml-4 flex-shrink-0 px-3 py-1 bg-white bg-opacity-20 rounded-lg text-sm font-medium whitespace-nowrap" id="revenue-growth">
+                +0%
+            </div>
+        </div>
+        <p class="text-green-100 text-sm mt-2">前月: <span id="last-revenue">¥0</span></p>
+    </div>
+    
+    <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
+        <div class="flex justify-between items-start mb-4">
+            <div class="flex-1 min-w-0">
+                <p class="text-blue-100 text-sm font-medium mb-1">パイプライン総額</p>
+                <p class="text-3xl font-bold leading-tight" id="pipeline-value">¥0</p>
+            </div>
+            <div class="ml-4 flex-shrink-0 px-3 py-1 bg-white bg-opacity-20 rounded-lg text-sm font-medium whitespace-nowrap" id="active-deals-count">
+                0件
+            </div>
+        </div>
+        <p class="text-blue-100 text-sm mt-2">進行中の案件</p>
+    </div>
+    
+    <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-6 text-white">
+        <div class="flex justify-between items-start mb-4">
+            <div class="flex-1 min-w-0">
+                <p class="text-purple-100 text-sm font-medium mb-1">成約率</p>
+                <p class="text-3xl font-bold leading-tight" id="win-rate">0%</p>
+            </div>
+            <div class="ml-4 flex-shrink-0 px-3 py-1 bg-white bg-opacity-20 rounded-lg text-sm font-medium whitespace-nowrap" id="won-deals">
+                0件受注
+            </div>
+        </div>
+        <p class="text-purple-100 text-sm mt-2">全クローズ案件から算出</p>
+    </div>
+</div>
+
+<div id="stale-deals-alert" class="hidden mb-8 p-4 bg-orange-100 dark:bg-orange-900 border border-orange-300 dark:border-orange-700 rounded-lg">
+    <div class="flex items-center">
+        <svg class="w-5 h-5 text-orange-600 dark:text-orange-300 mr-3" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"/>
+        </svg>
+        <div>
+            <p class="font-medium text-orange-800 dark:text-orange-200">
+                <span id="stale-count">0</span>件の案件が30日以上同じステージに滞留しています
+            </p>
+            <p class="text-sm text-orange-700 dark:text-orange-300 mt-1">案件の見直しを検討してください</p>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">案件ステージ別</h2>
+        <canvas id="dealStageChart"></canvas>
+    </div>
+    
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">業界別受注率ランキング</h2>
+        <div id="industryRankingEmpty" class="text-center py-8 text-gray-500 dark:text-gray-400">
+            データがありません
+        </div>
+        <canvas id="industryRankingChart" class="hidden"></canvas>
+    </div>
+</div>
+
+<!-- Industry Drill-down Analysis Section -->
+<div class="mb-8">
+    <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">業界別分析</h2>
+    
+    <!-- Filter Controls -->
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label for="industrySelect" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">業界</label>
+                <select id="industrySelect" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <option value="">すべて</option>
+                    <!-- Will be populated dynamically -->
+                </select>
+            </div>
+            
+            <div>
+                <label for="metricSelect" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">分析種別</label>
+                <select id="metricSelect" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <option value="avg_amount">平均単価</option>
+                    <option value="win_rate">受注率</option>
+                    <option value="win_reasons">受注理由</option>
+                    <option value="loss_reasons">失注理由</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Analysis Chart Display -->
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4" id="industryAnalysisTitle">分析結果</h3>
+        <div id="industryAnalysisEmpty" class="text-center py-8 text-gray-500 dark:text-gray-400">
+            業界と分析種別を選択してください
+        </div>
+        <div class="flex justify-center">
+            <div style="max-width: 400px; max-height: 400px; width: 100%;">
+                <canvas id="industryAnalysisChart" class="hidden"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Conversion Insights Section (v2.6.0) -->
+<div class="mb-8">
+    <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">受注/失注分析</h2>
+    
+    <!-- Win Rate Summary Card -->
+    <div class="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl shadow-lg p-6 text-white mb-6">
+        <div class="grid grid-cols-3 gap-4">
+            <div>
+                <p class="text-green-100 text-sm font-medium">受注率</p>
+                <p class="text-3xl font-bold mt-2" id="analytics-win-rate">0%</p>
+            </div>
+            <div>
+                <p class="text-green-100 text-sm font-medium">受注</p>
+                <p class="text-2xl font-semibold mt-2" id="analytics-won-count">0件</p>
+            </div>
+            <div>
+                <p class="text-green-100 text-sm font-medium">失注</p>
+                <p class="text-2xl font-semibold mt-2" id="analytics-lost-count">0件</p>
+            </div>
+        </div>
+        <p class="text-green-100 text-sm mt-4">クローズ済み案件の成果</p>
+    </div>
+    
+    <!-- Win/Loss Reasons Charts -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">受注理由トップ5</h3>
+            <div id="winReasonEmpty" class="text-center py-8 text-gray-500 dark:text-gray-400">
+                データがありません
+            </div>
+            <canvas id="winReasonChart" class="hidden"></canvas>
+        </div>
+        
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">失注理由トップ5</h3>
+            <div id="lossReasonEmpty" class="text-center py-8 text-gray-500 dark:text-gray-400">
+                データがありません
+            </div>
+            <canvas id="lossReasonChart" class="hidden"></canvas>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">最近の案件</h2>
+        <div class="space-y-3">
+            {% if recent_deals %}
+                {% for deal in recent_deals %}
+                <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <div>
+                        <p class="font-medium text-gray-900 dark:text-white">{{ deal.title }}</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">{{ deal.company.name }}</p>
+                    </div>
+                    <span class="px-3 py-1 text-xs font-medium rounded-full 
+                        {% if deal.status == '進行中' %}bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200
+                        {% elif deal.status == '成約' %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200
+                        {% else %}bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200{% endif %}">
+                        {{ deal.status }}
+                    </span>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-gray-500 dark:text-gray-400 text-center py-4">案件がありません</p>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">最近のタスク</h2>
+        <div class="space-y-3">
+            {% if recent_tasks %}
+                {% for task in recent_tasks %}
+                <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <div>
+                        <p class="font-medium text-gray-900 dark:text-white">{{ task.title }}</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">{{ task.deal.title }}</p>
+                    </div>
+                    <span class="px-3 py-1 text-xs font-medium rounded-full
+                        {% if task.status == '完了' %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200
+                        {% elif task.status == '進行中' %}bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200
+                        {% else %}bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200{% endif %}">
+                        {{ task.status }}
+                    </span>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-gray-500 dark:text-gray-400 text-center py-4">タスクがありません</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function formatCurrency(value) {
+        return '¥' + Math.floor(value).toLocaleString('ja-JP');
+    }
+    
+    // Period selection handling
+    const periodSelect = document.getElementById('period-select');
+    const customDateRange = document.getElementById('custom-date-range');
+    const startDateInput = document.getElementById('start-date');
+    const endDateInput = document.getElementById('end-date');
+    const applyCustomButton = document.getElementById('apply-custom-range');
+    
+    periodSelect.addEventListener('change', function() {
+        if (this.value === 'custom') {
+            customDateRange.classList.remove('hidden');
+        } else {
+            customDateRange.classList.add('hidden');
+            loadKPIsWithPeriod(this.value);
+        }
+    });
+    
+    applyCustomButton.addEventListener('click', function() {
+        const startDate = startDateInput.value;
+        const endDate = endDateInput.value;
+        if (startDate && endDate) {
+            loadKPIsWithPeriod('custom', startDate, endDate);
+        }
+    });
+    
+    // Chart instances cache
+    let winReasonChartInstance = null;
+    let lossReasonChartInstance = null;
+    
+    // Load KPIs with period filter
+    function loadKPIsWithPeriod(period, startDate = null, endDate = null) {
+        let url = '/api/dashboard-kpis?period=' + period;
+        if (period === 'custom' && startDate && endDate) {
+            url += '&start_date=' + startDate + '&end_date=' + endDate;
+        }
+        
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                // Revenue cards
+                document.getElementById('current-revenue').textContent = formatCurrency(data.revenue.current_month);
+                document.getElementById('last-revenue').textContent = formatCurrency(data.revenue.last_month);
+                
+                const growthRate = data.revenue.growth_rate;
+                const growthElement = document.getElementById('revenue-growth');
+                growthElement.textContent = (growthRate >= 0 ? '+' : '') + growthRate.toFixed(1) + '%';
+                growthElement.className = growthRate >= 0 
+                    ? 'px-3 py-1 bg-white bg-opacity-20 rounded-lg text-sm font-medium'
+                    : 'px-3 py-1 bg-red-500 bg-opacity-30 rounded-lg text-sm font-medium';
+                
+                // Pipeline cards
+                document.getElementById('pipeline-value').textContent = formatCurrency(data.pipeline.total_value);
+                document.getElementById('active-deals-count').textContent = data.pipeline.active_deals + '件';
+                
+                // Win rate card
+                document.getElementById('win-rate').textContent = data.conversion.win_rate + '%';
+                document.getElementById('won-deals').textContent = data.conversion.won + '件受注';
+                
+                // Stale deals alert
+                const staleAlert = document.getElementById('stale-deals-alert');
+                if (data.alerts.stale_deals > 0) {
+                    document.getElementById('stale-count').textContent = data.alerts.stale_deals;
+                    staleAlert.classList.remove('hidden');
+                } else {
+                    staleAlert.classList.add('hidden');
+                }
+            })
+            .catch(error => {
+                console.error('Error loading KPIs:', error);
+            });
+        
+        // Load conversion analytics
+        loadConversionAnalytics(period, startDate, endDate);
+    }
+    
+    // Load conversion analytics
+    function loadConversionAnalytics(period, startDate = null, endDate = null) {
+        let url = '/api/analytics/win_rate?period=' + period;
+        if (period === 'custom' && startDate && endDate) {
+            url += '&start_date=' + startDate + '&end_date=' + endDate;
+        }
+        
+        // Load win rate
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('analytics-win-rate').textContent = (data.win_rate * 100).toFixed(1) + '%';
+                document.getElementById('analytics-won-count').textContent = data.won + '件';
+                document.getElementById('analytics-lost-count').textContent = data.lost + '件';
+            })
+            .catch(error => console.error('Error loading win rate:', error));
+        
+        // Load win reasons
+        let winUrl = '/api/analytics/win_reasons?period=' + period;
+        if (period === 'custom' && startDate && endDate) {
+            winUrl += '&start_date=' + startDate + '&end_date=' + endDate;
+        }
+        
+        fetch(winUrl)
+            .then(response => response.json())
+            .then(data => {
+                const winReasons = data.data || [];
+                updateReasonChart('win', winReasons);
+            })
+            .catch(error => console.error('Error loading win reasons:', error));
+        
+        // Load loss reasons
+        let lossUrl = '/api/analytics/loss_reasons?period=' + period;
+        if (period === 'custom' && startDate && endDate) {
+            lossUrl += '&start_date=' + startDate + '&end_date=' + endDate;
+        }
+        
+        fetch(lossUrl)
+            .then(response => response.json())
+            .then(data => {
+                const lossReasons = data.data || [];
+                updateReasonChart('loss', lossReasons);
+            })
+            .catch(error => console.error('Error loading loss reasons:', error));
+    }
+    
+    // Update reason chart
+    function updateReasonChart(type, data) {
+        const isDark = document.documentElement.classList.contains('dark');
+        const textColor = isDark ? '#e5e7eb' : '#374151';
+        const gridColor = isDark ? '#374151' : '#e5e7eb';
+        
+        const canvasId = type === 'win' ? 'winReasonChart' : 'lossReasonChart';
+        const emptyId = type === 'win' ? 'winReasonEmpty' : 'lossReasonEmpty';
+        const chartInstance = type === 'win' ? winReasonChartInstance : lossReasonChartInstance;
+        const color = type === 'win' ? '#10b981' : '#ef4444';
+        
+        const canvas = document.getElementById(canvasId);
+        const emptyDiv = document.getElementById(emptyId);
+        
+        if (!data || data.length === 0) {
+            canvas.classList.add('hidden');
+            emptyDiv.classList.remove('hidden');
+            if (chartInstance) {
+                chartInstance.destroy();
+                if (type === 'win') winReasonChartInstance = null;
+                else lossReasonChartInstance = null;
+            }
+            return;
+        }
+        
+        canvas.classList.remove('hidden');
+        emptyDiv.classList.add('hidden');
+        
+        // Take top 5
+        const top5 = data.slice(0, 5);
+        const labels = top5.map(d => d.category);
+        const counts = top5.map(d => d.count);
+        
+        if (chartInstance) {
+            chartInstance.data.labels = labels;
+            chartInstance.data.datasets[0].data = counts;
+            chartInstance.update();
+        } else {
+            const newChart = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '件数',
+                        data: counts,
+                        backgroundColor: color,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: { color: textColor },
+                            grid: { color: gridColor }
+                        },
+                        y: {
+                            ticks: { color: textColor },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+            
+            if (type === 'win') winReasonChartInstance = newChart;
+            else lossReasonChartInstance = newChart;
+        }
+    }
+    
+    // Initial load with current month
+    loadKPIsWithPeriod('current_month');
+    
+    // Load chart data
+    fetch('/api/dashboard-data')
+        .then(response => response.json())
+        .then(data => {
+            const stageLabels = data.deals_by_stage.map(d => d.stage);
+            const stageCounts = data.deals_by_stage.map(d => d.count);
+            
+            const statusLabels = data.deals_by_status.map(d => d.status);
+            const statusCounts = data.deals_by_status.map(d => d.count);
+            
+            const isDark = document.documentElement.classList.contains('dark');
+            const textColor = isDark ? '#e5e7eb' : '#374151';
+            const gridColor = isDark ? '#374151' : '#e5e7eb';
+            
+            new Chart(document.getElementById('dealStageChart'), {
+                type: 'bar',
+                data: {
+                    labels: stageLabels,
+                    datasets: [{
+                        label: '案件数',
+                        data: stageCounts,
+                        backgroundColor: '#6366f1',
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: textColor },
+                            grid: { color: gridColor }
+                        },
+                        x: {
+                            ticks: { color: textColor },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Error loading charts:', error);
+        });
+    
+    // Industry Ranking Chart
+    let industryRankingChartInstance = null;
+    
+    function loadIndustryRanking() {
+        const period = document.getElementById('period-select').value;
+        
+        fetch(`/api/analytics/industry/win_rate_ranking?period=${period}`)
+            .then(response => response.json())
+            .then(result => {
+                const data = result.data || [];
+                const emptyDiv = document.getElementById('industryRankingEmpty');
+                const canvas = document.getElementById('industryRankingChart');
+                
+                if (data.length === 0) {
+                    emptyDiv.classList.remove('hidden');
+                    canvas.classList.add('hidden');
+                    if (industryRankingChartInstance) {
+                        industryRankingChartInstance.destroy();
+                        industryRankingChartInstance = null;
+                    }
+                    return;
+                }
+                
+                emptyDiv.classList.add('hidden');
+                canvas.classList.remove('hidden');
+                
+                const labels = data.map(d => d.industry);
+                const winRates = data.map(d => (d.win_rate * 100).toFixed(1));
+                
+                const isDark = document.documentElement.classList.contains('dark');
+                const textColor = isDark ? '#e5e7eb' : '#374151';
+                const gridColor = isDark ? '#374151' : '#e5e7eb';
+                
+                if (industryRankingChartInstance) {
+                    industryRankingChartInstance.destroy();
+                }
+                
+                industryRankingChartInstance = new Chart(canvas, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: '受注率 (%)',
+                            data: winRates,
+                            backgroundColor: '#10b981',
+                            borderRadius: 6
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    afterLabel: function(context) {
+                                        const index = context.dataIndex;
+                                        const item = data[index];
+                                        return `受注: ${item.won}件 / 失注: ${item.lost}件`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                beginAtZero: true,
+                                max: 100,
+                                ticks: { 
+                                    color: textColor,
+                                    callback: function(value) { return value + '%'; }
+                                },
+                                grid: { color: gridColor }
+                            },
+                            y: {
+                                ticks: { color: textColor },
+                                grid: { display: false }
+                            }
+                        }
+                    }
+                });
+            })
+            .catch(error => {
+                console.error('Error loading industry ranking:', error);
+                const emptyDiv = document.getElementById('industryRankingEmpty');
+                emptyDiv.textContent = 'データの読み込みに失敗しました';
+                emptyDiv.classList.remove('hidden');
+            });
+    }
+    
+    // Load industry ranking on page load
+    loadIndustryRanking();
+    
+    // Reload when period changes
+    document.getElementById('period-select').addEventListener('change', loadIndustryRanking);
+    
+    // Industry Drill-down Analysis
+    let industryAnalysisChartInstance = null;
+    
+    // Populate industry select with categories
+    const industries = {{ industries|tojson|safe }};
+    const industrySelect = document.getElementById('industrySelect');
+    industries.forEach(ind => {
+        const option = document.createElement('option');
+        option.value = ind;
+        option.textContent = ind;
+        industrySelect.appendChild(option);
+    });
+    
+    function loadIndustryAnalysis() {
+        const industry = industrySelect.value;
+        const metric = document.getElementById('metricSelect').value;
+        const period = document.getElementById('period-select').value;
+        
+        // Build API URL based on metric
+        let apiUrl;
+        if (metric === 'avg_amount') {
+            apiUrl = `/api/analytics/industry/avg_amount?period=${period}`;
+        } else if (metric === 'win_rate') {
+            apiUrl = `/api/analytics/industry/win_rate?period=${period}`;
+        } else if (metric === 'win_reasons') {
+            apiUrl = `/api/analytics/industry/win_reasons?period=${period}`;
+        } else if (metric === 'loss_reasons') {
+            apiUrl = `/api/analytics/industry/loss_reasons?period=${period}`;
+        }
+        
+        if (industry) {
+            apiUrl += `&industry=${encodeURIComponent(industry)}`;
+        }
+        
+        fetch(apiUrl)
+            .then(response => response.json())
+            .then(result => {
+                const emptyDiv = document.getElementById('industryAnalysisEmpty');
+                const canvas = document.getElementById('industryAnalysisChart');
+                const title = document.getElementById('industryAnalysisTitle');
+                
+                // Update title
+                const industryLabel = industry || 'すべて';
+                const metricLabel = {
+                    'avg_amount': '平均単価',
+                    'win_rate': '受注率',
+                    'win_reasons': '受注理由',
+                    'loss_reasons': '失注理由'
+                }[metric];
+                title.textContent = `${industryLabel} - ${metricLabel}`;
+                
+                const isDark = document.documentElement.classList.contains('dark');
+                const textColor = isDark ? '#e5e7eb' : '#374151';
+                const gridColor = isDark ? '#374151' : '#e5e7eb';
+                
+                if (industryAnalysisChartInstance) {
+                    industryAnalysisChartInstance.destroy();
+                    industryAnalysisChartInstance = null;
+                }
+                
+                if (metric === 'avg_amount') {
+                    if (result.count === 0) {
+                        emptyDiv.textContent = 'データがありません';
+                        emptyDiv.classList.remove('hidden');
+                        canvas.classList.add('hidden');
+                        return;
+                    }
+                    
+                    emptyDiv.classList.add('hidden');
+                    canvas.classList.remove('hidden');
+                    
+                    industryAnalysisChartInstance = new Chart(canvas, {
+                        type: 'bar',
+                        data: {
+                            labels: [industryLabel],
+                            datasets: [{
+                                label: '平均単価（円）',
+                                data: [result.avg_amount],
+                                backgroundColor: '#3b82f6',
+                                borderRadius: 8
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            return `¥${context.parsed.y.toLocaleString()} (${result.count}件の受注)`;
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: { 
+                                        color: textColor,
+                                        callback: function(value) {
+                                            return '¥' + value.toLocaleString();
+                                        }
+                                    },
+                                    grid: { color: gridColor }
+                                },
+                                x: {
+                                    ticks: { color: textColor },
+                                    grid: { display: false }
+                                }
+                            }
+                        }
+                    });
+                    
+                } else if (metric === 'win_rate') {
+                    if (result.won === 0 && result.lost === 0) {
+                        emptyDiv.textContent = 'データがありません';
+                        emptyDiv.classList.remove('hidden');
+                        canvas.classList.add('hidden');
+                        return;
+                    }
+                    
+                    emptyDiv.classList.add('hidden');
+                    canvas.classList.remove('hidden');
+                    
+                    industryAnalysisChartInstance = new Chart(canvas, {
+                        type: 'bar',
+                        data: {
+                            labels: [industryLabel],
+                            datasets: [{
+                                label: '受注率（%）',
+                                data: [(result.win_rate * 100).toFixed(1)],
+                                backgroundColor: '#10b981',
+                                borderRadius: 8
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            return `${context.parsed.y}% (受注: ${result.won}件 / 失注: ${result.lost}件)`;
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    max: 100,
+                                    ticks: { 
+                                        color: textColor,
+                                        callback: function(value) { return value + '%'; }
+                                    },
+                                    grid: { color: gridColor }
+                                },
+                                x: {
+                                    ticks: { color: textColor },
+                                    grid: { display: false }
+                                }
+                            }
+                        }
+                    });
+                    
+                } else {
+                    // win_reasons or loss_reasons - use doughnut chart
+                    const data = result.data || [];
+                    
+                    if (data.length === 0) {
+                        emptyDiv.textContent = 'データがありません';
+                        emptyDiv.classList.remove('hidden');
+                        canvas.classList.add('hidden');
+                        return;
+                    }
+                    
+                    emptyDiv.classList.add('hidden');
+                    canvas.classList.remove('hidden');
+                    
+                    const labels = data.map(d => d.category);
+                    const counts = data.map(d => d.count);
+                    const colors = ['#6366f1', '#8b5cf6', '#a78bfa', '#c4b5fd', '#ddd6fe', '#e0e7ff', '#eef2ff'];
+                    
+                    industryAnalysisChartInstance = new Chart(canvas, {
+                        type: 'doughnut',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                data: counts,
+                                backgroundColor: colors.slice(0, labels.length)
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom',
+                                    labels: { color: textColor }
+                                }
+                            }
+                        }
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading industry analysis:', error);
+                const emptyDiv = document.getElementById('industryAnalysisEmpty');
+                emptyDiv.textContent = 'データの読み込みに失敗しました';
+                emptyDiv.classList.remove('hidden');
+            });
+    }
+    
+    // Initial load with default metric
+    loadIndustryAnalysis();
+    
+    // Reload when industry or metric changes
+    industrySelect.addEventListener('change', loadIndustryAnalysis);
+    document.getElementById('metricSelect').addEventListener('change', loadIndustryAnalysis);
+    document.getElementById('period-select').addEventListener('change', loadIndustryAnalysis);
+</script>
+{% endblock %}

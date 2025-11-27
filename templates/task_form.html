@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}{% if task %}タスク編集{% else %}タスク登録{% endif %} - CONNECT+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+            {% if task %}タスク編集{% else %}新規タスク登録{% endif %}
+        </h1>
+        <p class="text-gray-600 dark:text-gray-400">タスク情報を入力してください</p>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8 border border-gray-200 dark:border-gray-700">
+        <form method="POST" action="{% if task %}{{ url_for('edit_task', id=task.id) }}{% else %}{{ url_for('create_task') }}{% endif %}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="mb-6">
+                <label for="deal_name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">案件</label>
+                <input type="text" id="deal_name" name="deal_name" 
+                       value="{{ task.deal.title if task and task.deal else (task.deal_name if task else '') }}" 
+                       placeholder="案件名を入力してください"
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">案件名を自由に入力できます</p>
+            </div>
+            
+            <div class="mb-6">
+                <label for="title" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">タスク名 *</label>
+                <input type="text" id="title" name="title" value="{{ task.title if task else '' }}" required 
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+            
+            <div class="grid grid-cols-2 gap-6 mb-6">
+                <div>
+                    <label for="status" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ステータス *</label>
+                    <select id="status" name="status" required 
+                            class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="未着手" {% if task and task.status == '未着手' %}selected{% endif %}>未着手</option>
+                        <option value="進行中" {% if task and task.status == '進行中' %}selected{% endif %}>進行中</option>
+                        <option value="完了" {% if task and task.status == '完了' %}selected{% endif %}>完了</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="due_date" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">期限</label>
+                    <input type="date" id="due_date" name="due_date" value="{{ task.due_date.strftime('%Y-%m-%d') if task and task.due_date else '' }}" 
+                           class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+            </div>
+            
+            <div class="mb-6">
+                <label for="assignee" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">担当者</label>
+                <input type="text" id="assignee" name="assignee" value="{{ task.assignee if task else '' }}" 
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+            
+            <div class="flex gap-4">
+                <button type="submit" class="px-6 py-3 bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-200">
+                    {% if task %}更新{% else %}登録{% endif %}
+                </button>
+                <a href="{{ url_for('tasks') }}" class="px-6 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg transition duration-200">
+                    キャンセル
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}新規登録 - CONNECT+{% endblock %}
+
+{% block auth_content %}
+<div class="w-full max-w-md">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8">
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">CONNECT+</h1>
+            <p class="text-gray-600 dark:text-gray-400">新規アカウント作成</p>
+        </div>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="mb-4 p-4 rounded-lg {% if category == 'success' %}bg-green-100 text-green-800{% elif category == 'error' %}bg-red-100 text-red-800{% else %}bg-blue-100 text-blue-800{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <form method="POST" action="{{ url_for('register') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="mb-4">
+                <label for="name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">名前</label>
+                <input type="text" id="name" name="name" required value="{{ name or '' }}"
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+            
+            <div class="mb-4">
+                <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">メールアドレス</label>
+                <input type="email" id="email" name="email" required value="{{ email or '' }}"
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+            
+            <div class="mb-4">
+                <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">パスワード</label>
+                <input type="password" id="password" name="password" required 
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                <div class="mt-2 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                    <p class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">パスワード要件：</p>
+                    <ul class="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                        <li>• 8文字以上</li>
+                        <li>• 大文字を含む</li>
+                        <li>• 小文字を含む</li>
+                        <li>• 数字を含む</li>
+                        <li>• 特殊文字を含む (!@#$%^&*など)</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="mb-6">
+                <label for="password_confirm" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">パスワード（確認）</label>
+                <input type="password" id="password_confirm" name="password_confirm" required 
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+            
+            <button type="submit" class="w-full px-4 py-3 bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-200">
+                アカウント作成
+            </button>
+        </form>
+        
+        <div class="mt-6 text-center">
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+                既にアカウントをお持ちですか？ 
+                <a href="{{ url_for('login') }}" class="text-primary hover:text-indigo-700 font-medium">ログイン</a>
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
