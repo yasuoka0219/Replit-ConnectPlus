@@ -118,3 +118,5 @@ python3 migrate_google_calendar.py
 
 問題が発生した場合は、サーバーのログを確認するか、管理者に問い合わせてください。
 
+
+
