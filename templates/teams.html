@@ -6,11 +6,13 @@
 <div class="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
     <div>
         <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">チーム管理</h1>
-        <p class="text-sm sm:text-base text-gray-600 dark:text-gray-400">チームとメンバーを管理</p>
+        <p class="text-sm sm:text-base text-gray-600 dark:text-gray-400">チームとメンバーを確認{% if is_team_manager %}・管理{% endif %}</p>
     </div>
+    {% if is_team_manager %}
     <button onclick="openCreateTeamModal()" class="w-full sm:w-auto px-6 py-3 text-base text-center bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-200">
         + 新規チーム
     </button>
+    {% endif %}
 </div>
 
 <!-- チーム一覧 -->
@@ -43,13 +45,14 @@
                     class="flex-1 px-4 py-2 text-sm font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded hover:bg-green-200 dark:hover:bg-green-800">
                 案件
             </button>
-            <button onclick="openEditTeamModal({{ team.id }}, '{{ team.name }}', '{{ team.description or '' }}', '{{ team.color or '' }}')" 
-                    class="flex-1 px-4 py-2 text-sm font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded hover:bg-blue-200 dark:hover:bg-blue-800">
-                編集
-            </button>
             <button onclick="openMembersModal({{ team.id }}, '{{ team.name }}')" 
                     class="flex-1 px-4 py-2 text-sm font-medium bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 rounded hover:bg-purple-200 dark:hover:bg-purple-800">
                 メンバー
+            </button>
+            {% if is_team_manager %}
+            <button onclick="openEditTeamModal({{ team.id }}, '{{ team.name }}', '{{ team.description or '' }}', '{{ team.color or '' }}')" 
+                    class="flex-1 px-4 py-2 text-sm font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded hover:bg-blue-200 dark:hover:bg-blue-800">
+                編集
             </button>
             {% if has_role(current_user, 'admin') and team.name != 'メインチーム' %}
             <form method="POST" action="{{ url_for('delete_team', id=team.id) }}" onsubmit="return confirm('本当にこのチームを削除しますか？メンバーはデフォルトチームに移動されます。');" class="inline">
@@ -58,6 +61,7 @@
                     削除
                 </button>
             </form>
+            {% endif %}
             {% endif %}
         </div>
     </div>
@@ -152,12 +156,45 @@
     </div>
 </div>
 
-<!-- メンバー管理モーダル -->
+<!-- メンバー閲覧モーダル -->
 <div id="membersModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
         <div class="flex items-center justify-between mb-4">
-            <h3 class="text-xl font-bold text-gray-900 dark:text-white" id="membersModalTitle">メンバー管理</h3>
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white" id="membersModalTitle">メンバー一覧</h3>
             <button onclick="closeMembersModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <div id="membersList" class="space-y-2 max-h-96 overflow-y-auto">
+            <!-- メンバー一覧がここに表示されます -->
+        </div>
+        
+        {% if is_team_manager %}
+        <div class="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <button onclick="openMembersEditModal()" class="w-full px-4 py-2 bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-200">
+                メンバーを編集
+            </button>
+        </div>
+        {% endif %}
+        
+        <div class="mt-4 flex justify-end">
+            <button onclick="closeMembersModal()" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg transition duration-200">
+                閉じる
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- メンバー編集モーダル（管理者・リーダーのみ） -->
+{% if is_team_manager %}
+<div id="membersEditModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white" id="membersEditModalTitle">メンバー管理</h3>
+            <button onclick="closeMembersEditModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                 </svg>
@@ -200,13 +237,14 @@
                 <button type="submit" class="flex-1 px-4 py-2 bg-primary hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-200">
                     保存
                 </button>
-                <button type="button" onclick="closeMembersModal()" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg transition duration-200">
+                <button type="button" onclick="closeMembersEditModal()" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg transition duration-200">
                     キャンセル
                 </button>
             </div>
         </form>
     </div>
 </div>
+{% endif %}
 
 <!-- 案件一覧モーダル -->
 <div id="dealsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
@@ -263,15 +301,41 @@ function closeEditTeamModal() {
 
 function openMembersModal(teamId, teamName) {
     currentTeamId = teamId;
-    document.getElementById('membersModalTitle').textContent = `${teamName} - メンバー管理`;
-    document.getElementById('membersForm').action = `/teams/${teamId}/members`;
+    document.getElementById('membersModalTitle').textContent = `${teamName} - メンバー一覧`;
     
-    // 現在のチームメンバーをチェック
-    const checkboxes = document.querySelectorAll('input[name="members"]');
-    checkboxes.forEach(checkbox => {
-        const userTeamId = checkbox.getAttribute('data-team-id');
-        checkbox.checked = (userTeamId && parseInt(userTeamId) === teamId);
-    });
+    // チームメンバーをAPI経由で取得して表示
+    fetch(`/api/teams/${teamId}/members`)
+        .then(response => response.json())
+        .then(data => {
+            const membersList = document.getElementById('membersList');
+            
+            if (data.success && data.members && data.members.length > 0) {
+                membersList.innerHTML = data.members.map(user => `
+                    <div class="flex items-center p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700">
+                        <div class="flex-1">
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium text-gray-900 dark:text-white">${user.name}</span>
+                                <span class="px-2 py-1 text-xs font-medium rounded-full ${
+                                    user.role === 'admin' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
+                                    user.role === 'lead' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' :
+                                    user.role === 'member' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
+                                    'bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200'
+                                }">
+                                    ${user.role === 'admin' ? '管理者' : user.role === 'lead' ? 'リーダー' : user.role === 'member' ? 'メンバー' : user.role === 'viewer' ? '閲覧のみ' : user.role}
+                                </span>
+                            </div>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">${user.email}</p>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                membersList.innerHTML = '<p class="text-center text-gray-500 dark:text-gray-400 py-8">このチームにメンバーはいません。</p>';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('membersList').innerHTML = '<p class="text-center text-red-500 py-8">メンバーの取得に失敗しました。</p>';
+        });
     
     document.getElementById('membersModal').classList.remove('hidden');
     document.getElementById('membersModal').classList.add('flex');
@@ -281,6 +345,39 @@ function closeMembersModal() {
     document.getElementById('membersModal').classList.add('hidden');
     document.getElementById('membersModal').classList.remove('flex');
     currentTeamId = null;
+}
+
+function openMembersEditModal() {
+    if (!currentTeamId) return;
+    
+    // チーム情報を取得
+    fetch(`/api/teams/${currentTeamId}/members`)
+        .then(response => response.json())
+        .then(data => {
+            if (!data.success) return;
+            
+            document.getElementById('membersEditModalTitle').textContent = `${data.team_name} - メンバー管理`;
+            document.getElementById('membersForm').action = `/teams/${currentTeamId}/members`;
+            
+            // 現在のチームメンバーをチェック
+            const checkboxes = document.querySelectorAll('#membersEditModal input[name="members"]');
+            const memberIds = data.members.map(m => m.id);
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = memberIds.includes(parseInt(checkbox.value));
+            });
+            
+            document.getElementById('membersEditModal').classList.remove('hidden');
+            document.getElementById('membersEditModal').classList.add('flex');
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('チーム情報の取得に失敗しました。');
+        });
+}
+
+function closeMembersEditModal() {
+    document.getElementById('membersEditModal').classList.add('hidden');
+    document.getElementById('membersEditModal').classList.remove('flex');
 }
 
 function openDealsModal(teamId, teamName) {
@@ -349,6 +446,7 @@ document.addEventListener('keydown', (e) => {
         closeCreateTeamModal();
         closeEditTeamModal();
         closeMembersModal();
+        closeMembersEditModal();
         closeDealsModal();
     }
 });

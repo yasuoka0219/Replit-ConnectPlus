@@ -461,13 +461,29 @@ class Email2FACode(db.Model):
     
     def is_valid(self):
         """Check if code is still valid"""
-        if self.used:
-            return False
-        if datetime.utcnow() > self.expires_at:
-            return False
-        if self.attempts >= 3:  # MAX_CODE_ATTEMPTS
-            return False
-        return True
+        return not self.used and datetime.utcnow() <= self.expires_at
+
+
+class PasswordResetToken(db.Model):
+    """Password reset token storage"""
+    __tablename__ = 'password_reset_tokens'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    token = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False, index=True)
+    used = db.Column(db.Boolean, default=False, nullable=False)
+    
+    # Relationships
+    user = db.relationship('User', backref='password_reset_tokens')
+    
+    def __repr__(self):
+        return f'<PasswordResetToken user_id={self.user_id} used={self.used}>'
+    
+    def is_valid(self):
+        """Check if token is still valid"""
+        return not self.used and datetime.utcnow() <= self.expires_at
 
 
 class GoogleCalendarConnection(db.Model):

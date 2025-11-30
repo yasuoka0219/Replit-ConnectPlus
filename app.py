@@ -5,11 +5,32 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from flask_wtf.csrf import CSRFProtect
 from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
+import hashlib
+import hmac
+
+# Python 3.9 compatibility: Custom password check function that avoids scrypt
+def safe_check_password_hash(pwhash, password):
+    """
+    Check password hash safely, avoiding scrypt on Python 3.9.
+    If the stored hash uses scrypt, we can't verify it - user needs to reset password.
+    """
+    # If the hash starts with scrypt, we can't verify it on Python 3.9
+    if isinstance(pwhash, str) and pwhash.startswith('scrypt$'):
+        return False
+    
+    try:
+        return check_password_hash(pwhash, password)
+    except (AttributeError, ValueError) as e:
+        # Catch scrypt-related errors and return False
+        if 'scrypt' in str(e).lower():
+            return False
+        # Re-raise other errors
+        raise
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from database import db
-from models import User, Company, Contact, Deal, Task, Activity, Quote, QuoteItem, Invoice, InvoiceItem, OrgProfile, Team, LoginAttempt, SecurityLog, Email2FACode, GoogleCalendarConnection
+from models import User, Company, Contact, Deal, Task, Activity, Quote, QuoteItem, Invoice, InvoiceItem, OrgProfile, Team, LoginAttempt, SecurityLog, Email2FACode, GoogleCalendarConnection, PasswordResetToken
 from utils.export_utils import (
     export_companies_to_csv, export_companies_to_excel,
     export_deals_to_csv, export_deals_to_excel,
@@ -33,6 +54,10 @@ from utils.google_calendar import (
     get_authorization_url, exchange_code_for_tokens, get_calendar_service,
     create_calendar_event, update_calendar_event, delete_calendar_event,
     test_connection
+)
+from utils.password_reset import (
+    generate_reset_token, send_password_reset_email,
+    RESET_TOKEN_EXPIRY_HOURS
 )
 
 load_dotenv()
@@ -438,7 +463,7 @@ def login():
             return render_template('login.html', email=email)
         
         # Verify password (only if not in 2FA verification step)
-        if user and password and user.password_hash and check_password_hash(user.password_hash, password):
+        if user and password and user.password_hash and safe_check_password_hash(user.password_hash, password):
             # Password is correct, now check 2FA if enabled
             if user.two_factor_enabled:
                 two_factor_type = 'email'  # Always use email-based 2FA
@@ -546,7 +571,7 @@ def register():
         user = User(
             name=name,
             email=email,
-            password_hash=generate_password_hash(password),
+            password_hash=generate_password_hash(password, method='pbkdf2:sha256'),
             role=role,
             team_id=team.id if team else None
         )
@@ -560,6 +585,103 @@ def register():
         return redirect(url_for('login'))
     
     return render_template('register.html')
+
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    """パスワードリセットリクエスト"""
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip()
+        
+        if not email:
+            flash('メールアドレスを入力してください。', 'error')
+            return render_template('forgot_password.html')
+        
+        user = User.query.filter_by(email=email).first()
+        
+        # セキュリティのため、ユーザーが存在しても存在しなくても同じメッセージを表示
+        if user:
+            # 古いトークンを無効化
+            PasswordResetToken.query.filter_by(user_id=user.id, used=False).update({'used': True})
+            db.session.commit()
+            
+            # 新しいトークンを生成
+            token = generate_reset_token()
+            expires_at = datetime.utcnow() + timedelta(hours=RESET_TOKEN_EXPIRY_HOURS)
+            
+            reset_token = PasswordResetToken(
+                user_id=user.id,
+                token=token,
+                expires_at=expires_at
+            )
+            db.session.add(reset_token)
+            db.session.commit()
+            
+            # リセットURLを生成
+            reset_url = url_for('reset_password', token=token, _external=True)
+            
+            # メール送信
+            send_password_reset_email(user, token, reset_url)
+            
+            log_security_event('password_reset_requested', f'Password reset requested for {email}', user.id, ip_address=get_client_ip(), user_agent=get_user_agent())
+        
+        # セキュリティのため、ユーザーの有無に関わらず同じメッセージを表示
+        flash('パスワードリセット用のメールを送信しました。メールをご確認ください。', 'info')
+        return redirect(url_for('login'))
+    
+    return render_template('forgot_password.html')
+
+@app.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    """パスワードリセット実行"""
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    
+    # トークンを検証
+    reset_token = PasswordResetToken.query.filter_by(token=token, used=False).first()
+    
+    if not reset_token or not reset_token.is_valid():
+        flash('パスワードリセットリンクが無効または期限切れです。再度リクエストしてください。', 'error')
+        return redirect(url_for('forgot_password'))
+    
+    user = reset_token.user
+    
+    if request.method == 'POST':
+        password = request.form.get('password', '').strip()
+        password_confirm = request.form.get('password_confirm', '').strip()
+        
+        # パスワード検証
+        is_valid, errors = validate_password_strength(password)
+        if not is_valid:
+            for error in errors:
+                flash(error, 'error')
+            return render_template('reset_password.html', token=token)
+        
+        if password != password_confirm:
+            flash('パスワードが一致しません。', 'error')
+            return render_template('reset_password.html', token=token)
+        
+        # パスワードを更新
+        user.password_hash = generate_password_hash(password, method='pbkdf2:sha256')
+        user.reset_failed_attempts()
+        user.unlock_account()
+        
+        # トークンを無効化
+        reset_token.used = True
+        
+        # 他の有効なリセットトークンも無効化
+        PasswordResetToken.query.filter_by(user_id=user.id, used=False).update({'used': True})
+        
+        db.session.commit()
+        
+        log_security_event('password_reset_completed', f'Password reset completed for {user.email}', user.id, ip_address=get_client_ip(), user_agent=get_user_agent())
+        
+        flash('パスワードを変更しました。新しいパスワードでログインしてください。', 'success')
+        return redirect(url_for('login'))
+    
+    return render_template('reset_password.html', token=token)
 
 @app.route('/clear-session')
 def clear_session():
@@ -1939,11 +2061,7 @@ def delete_task(id):
 @app.route('/teams')
 @login_required
 def teams():
-    """チーム管理ページ（管理者・リーダーのみ）"""
-    if not is_team_manager(current_user):
-        flash('チーム管理には管理者またはリーダー権限が必要です。', 'error')
-        return redirect(url_for('dashboard'))
-    
+    """チーム管理ページ（全ユーザーが閲覧可能、編集は管理者・リーダーのみ）"""
     teams_list = Team.query.order_by(Team.created_at.desc()).all()
     users_list = User.query.order_by(User.name).all()
     
@@ -2095,12 +2213,32 @@ def update_member_role(team_id, user_id):
     flash(f'{user.name}の役職を{new_role}に変更しました。', 'success')
     return redirect(url_for('teams'))
 
+@app.route('/api/teams/<int:team_id>/members')
+@login_required
+def get_team_members(team_id):
+    """チームに紐づくメンバー一覧を取得（全ユーザー閲覧可能）"""
+    team = Team.query.get_or_404(team_id)
+    
+    members = []
+    for user in team.users:
+        members.append({
+            'id': user.id,
+            'name': user.name,
+            'email': user.email,
+            'role': user.role
+        })
+    
+    return jsonify({
+        'success': True,
+        'team_id': team_id,
+        'team_name': team.name,
+        'members': members
+    })
+
 @app.route('/api/teams/<int:team_id>/deals')
 @login_required
 def get_team_deals(team_id):
-    """チームに紐づく案件一覧を取得（管理者・リーダーのみ）"""
-    if not is_team_manager(current_user):
-        return jsonify({'success': False, 'error': '権限がありません'}), 403
+    """チームに紐づく案件一覧を取得（全ユーザー閲覧可能）"""
     
     team = Team.query.get_or_404(team_id)
     deals = Deal.query.filter_by(team_id=team_id).order_by(Deal.created_at.desc()).all()
@@ -2395,7 +2533,7 @@ def disable_2fa():
             return jsonify({'success': False, 'error': '2FAは既に無効です'}), 400
         
         # Verify password
-        if not check_password_hash(user.password_hash, password):
+        if not safe_check_password_hash(user.password_hash, password):
             return jsonify({'success': False, 'error': 'パスワードが正しくありません'}), 400
         
         # No need to verify 2FA code when disabling (only password required)

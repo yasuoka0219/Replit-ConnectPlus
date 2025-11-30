@@ -30,7 +30,7 @@ def create_users():
     demo_user = User(
         name="山田太郎",
         email="demo@example.com",
-        password_hash=generate_password_hash("demo1234")
+        password_hash=generate_password_hash("demo1234", method='pbkdf2:sha256')
     )
     db.session.add(demo_user)
     db.session.commit()

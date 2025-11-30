@@ -89,10 +89,13 @@
             </button>
         </form>
         
-        <div class="mt-6 text-center">
+        <div class="mt-6 text-center space-y-2">
             <p class="text-sm text-gray-600 dark:text-gray-400">
                 アカウントをお持ちでないですか？ 
                 <a href="{{ url_for('register') }}" class="text-primary hover:text-indigo-700 font-medium">新規登録</a>
+            </p>
+            <p class="text-sm">
+                <a href="{{ url_for('forgot_password') }}" class="text-primary hover:text-indigo-700 font-medium">パスワードを忘れた場合</a>
             </p>
         </div>
     </div>

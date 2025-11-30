@@ -95,14 +95,12 @@
                     請求管理
                 </a>
                 
-                {% if is_team_manager %}
                 <a href="{{ url_for('teams') }}" class="flex items-center px-4 py-3 mb-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg {% if request.endpoint in ['teams', 'create_team', 'edit_team'] %}bg-primary text-white hover:bg-primary{% endif %}">
                     <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
                     </svg>
                     チーム管理
                 </a>
-                {% endif %}
                 
                 <a href="{{ url_for('settings') }}" class="flex items-center px-4 py-3 mb-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg {% if request.endpoint == 'settings' %}bg-primary text-white hover:bg-primary{% endif %}">
                     <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
