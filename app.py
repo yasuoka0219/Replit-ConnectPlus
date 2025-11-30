@@ -4559,8 +4559,8 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"✗ Failed to start backup scheduler: {e}")
     
-    # macOSのAirPlay Receiverがポート5000を使用している場合があるため、5001を使用
+    # Replit環境対応：ホストは0.0.0.0、ポート5000を使用
     # 本番環境では環境変数PORTを使用し、debug=Falseに設定
-    port = int(os.environ.get('PORT', 5001))
+    port = 5000
     debug = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
-    app.run(host='127.0.0.1', port=port, debug=debug)
+    app.run(host='0.0.0.0', port=port, debug=debug)
