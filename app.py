@@ -268,7 +268,12 @@ def apply_scope_to_query(query, user, view_scope):
     if view_scope == 'personal':
         return query.filter(Deal.assignee_id == user.id)
     if view_scope == 'team' and user.team_id:
-        return query.filter(Deal.team_id == user.team_id)
+        return query.filter(
+            db.or_(
+                Deal.team_id == user.team_id,
+                Deal.team_id.is_(None)
+            )
+        )
     return query
 
 @login_manager.unauthorized_handler
