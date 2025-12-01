@@ -329,6 +329,24 @@
     
     // Load KPIs with period filter
     function loadKPIsWithPeriod(period, startDate = null, endDate = null) {
+        // Update labels based on period
+        const labelMap = {
+            'current_month': '今月の売上',
+            'last_month': '先月の売上',
+            'current_year': '今年の売上',
+            'custom': '期間の売上'
+        };
+        
+        const comparisonLabelMap = {
+            'current_month': '前月',
+            'last_month': '前々月',
+            'current_year': '前年',
+            'custom': '前期間'
+        };
+        
+        document.getElementById('revenue-label').textContent = labelMap[period] || '売上';
+        document.getElementById('comparison-label').textContent = comparisonLabelMap[period] || '比較期間';
+        
         let url = '/api/dashboard-kpis?period=' + period;
         if (period === 'custom' && startDate && endDate) {
             url += '&start_date=' + startDate + '&end_date=' + endDate;
