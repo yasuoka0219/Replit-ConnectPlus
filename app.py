@@ -2914,14 +2914,14 @@ def api_dashboard_kpis():
     pipeline_filter = db.or_(Deal.status == '進行中', Deal.status == 'OPEN')
     
     if period in ['current_month', 'last_month']:
-        # Filter by revenue_month for monthly view
+        # Filter by revenue_month for monthly view (exact match, no NULL)
         current_revenue_month = current_period_start.strftime('%Y-%m')
         pipeline_by_stage = db.session.query(
             Deal.stage, 
             db.func.sum(Deal.amount).label('total')
         ).filter(
             pipeline_filter,
-            db.or_(Deal.revenue_month == current_revenue_month, Deal.revenue_month.is_(None))
+            Deal.revenue_month == current_revenue_month
         ).group_by(Deal.stage).all()
     else:
         # Filter by created_at for year/custom range
@@ -2941,7 +2941,7 @@ def api_dashboard_kpis():
         current_revenue_month = current_period_start.strftime('%Y-%m')
         active_deals = Deal.query.filter(
             pipeline_filter,
-            db.or_(Deal.revenue_month == current_revenue_month, Deal.revenue_month.is_(None))
+            Deal.revenue_month == current_revenue_month
         ).count()
         won_deals = Deal.query.filter(
             db.or_(Deal.status == '受注', Deal.status == 'WON'),
@@ -2982,7 +2982,7 @@ def api_dashboard_kpis():
             db.func.count(Deal.id).label('deal_count')
         ).join(Deal).filter(
             pipeline_filter,
-            db.or_(Deal.revenue_month == current_revenue_month, Deal.revenue_month.is_(None))
+            Deal.revenue_month == current_revenue_month
         ).group_by(Company.id, Company.name).order_by(
             db.text('total_value DESC')
         ).limit(5).all()
