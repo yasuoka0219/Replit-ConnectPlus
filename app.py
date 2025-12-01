@@ -2910,36 +2910,95 @@ def api_dashboard_kpis():
             Deal.created_at <= last_period_end
         ).scalar()
     
-    # Pipeline value by stage
-    pipeline_by_stage = db.session.query(
-        Deal.stage, 
-        db.func.sum(Deal.amount).label('total')
-    ).filter(
-        Deal.status == '進行中'
-    ).group_by(Deal.stage).all()
+    # Pipeline value by stage - filtered by revenue_month period
+    pipeline_filter = db.or_(Deal.status == '進行中', Deal.status == 'OPEN')
+    
+    if period in ['current_month', 'last_month']:
+        # Filter by revenue_month for monthly view
+        current_revenue_month = current_period_start.strftime('%Y-%m')
+        pipeline_by_stage = db.session.query(
+            Deal.stage, 
+            db.func.sum(Deal.amount).label('total')
+        ).filter(
+            pipeline_filter,
+            db.or_(Deal.revenue_month == current_revenue_month, Deal.revenue_month.is_(None))
+        ).group_by(Deal.stage).all()
+    else:
+        # Filter by created_at for year/custom range
+        pipeline_by_stage = db.session.query(
+            Deal.stage, 
+            db.func.sum(Deal.amount).label('total')
+        ).filter(
+            pipeline_filter,
+            Deal.created_at >= current_period_start,
+            Deal.created_at <= current_period_end
+        ).group_by(Deal.stage).all()
     
     total_pipeline = sum(stage[1] for stage in pipeline_by_stage if stage[1])
     
-    # Active deals count
-    active_deals = Deal.query.filter_by(status='進行中').count()
-    won_deals = Deal.query.filter_by(status='受注').count()
-    lost_deals = Deal.query.filter_by(status='失注').count()
+    # Active deals count - same period filter as pipeline
+    if period in ['current_month', 'last_month']:
+        current_revenue_month = current_period_start.strftime('%Y-%m')
+        active_deals = Deal.query.filter(
+            pipeline_filter,
+            db.or_(Deal.revenue_month == current_revenue_month, Deal.revenue_month.is_(None))
+        ).count()
+        won_deals = Deal.query.filter(
+            db.or_(Deal.status == '受注', Deal.status == 'WON'),
+            Deal.revenue_month == current_revenue_month
+        ).count()
+        lost_deals = Deal.query.filter(
+            db.or_(Deal.status == '失注', Deal.status == 'LOST'),
+            Deal.revenue_month == current_revenue_month
+        ).count()
+    else:
+        active_deals = Deal.query.filter(
+            pipeline_filter,
+            Deal.created_at >= current_period_start,
+            Deal.created_at <= current_period_end
+        ).count()
+        won_deals = Deal.query.filter(
+            db.or_(Deal.status == '受注', Deal.status == 'WON'),
+            Deal.created_at >= current_period_start,
+            Deal.created_at <= current_period_end
+        ).count()
+        lost_deals = Deal.query.filter(
+            db.or_(Deal.status == '失注', Deal.status == 'LOST'),
+            Deal.created_at >= current_period_start,
+            Deal.created_at <= current_period_end
+        ).count()
     
     # Win rate
     total_closed = won_deals + lost_deals
     win_rate = (won_deals / total_closed * 100) if total_closed > 0 else 0
     
-    # Top companies by deal value
-    top_companies = db.session.query(
-        Company.id,
-        Company.name,
-        db.func.sum(Deal.amount).label('total_value'),
-        db.func.count(Deal.id).label('deal_count')
-    ).join(Deal).filter(
-        Deal.status == '進行中'
-    ).group_by(Company.id, Company.name).order_by(
-        db.text('total_value DESC')
-    ).limit(5).all()
+    # Top companies by deal value - same period filter as pipeline
+    if period in ['current_month', 'last_month']:
+        current_revenue_month = current_period_start.strftime('%Y-%m')
+        top_companies = db.session.query(
+            Company.id,
+            Company.name,
+            db.func.sum(Deal.amount).label('total_value'),
+            db.func.count(Deal.id).label('deal_count')
+        ).join(Deal).filter(
+            pipeline_filter,
+            db.or_(Deal.revenue_month == current_revenue_month, Deal.revenue_month.is_(None))
+        ).group_by(Company.id, Company.name).order_by(
+            db.text('total_value DESC')
+        ).limit(5).all()
+    else:
+        top_companies = db.session.query(
+            Company.id,
+            Company.name,
+            db.func.sum(Deal.amount).label('total_value'),
+            db.func.count(Deal.id).label('deal_count')
+        ).join(Deal).filter(
+            pipeline_filter,
+            Deal.created_at >= current_period_start,
+            Deal.created_at <= current_period_end
+        ).group_by(Company.id, Company.name).order_by(
+            db.text('total_value DESC')
+        ).limit(5).all()
     
     # Deals with long stage duration (30+ days)
     stale_deals = Deal.query.filter(
