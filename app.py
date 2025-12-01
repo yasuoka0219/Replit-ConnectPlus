@@ -258,7 +258,8 @@ def get_available_scopes(user):
 
 def resolve_view_scope(user, requested_scope):
     scopes = get_available_scopes(user)
-    default_scope = 'team' if user.team_id else 'personal'
+    # Default to 'team' scope for deals page (show all team deals), fallback to 'all'
+    default_scope = 'team' if user.team_id else 'all'
     if requested_scope in scopes:
         return requested_scope
     return default_scope
