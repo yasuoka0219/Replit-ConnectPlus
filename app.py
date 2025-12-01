@@ -2882,14 +2882,14 @@ def api_dashboard_kpis():
         current_month_revenue = db.session.query(
             db.func.coalesce(db.func.sum(Deal.amount), 0)
         ).filter(
-            Deal.status == '受注',
+            db.or_(Deal.status == '受注', Deal.status == 'WON'),
             Deal.revenue_month == current_revenue_month
         ).scalar()
         
         last_month_revenue = db.session.query(
             db.func.coalesce(db.func.sum(Deal.amount), 0)
         ).filter(
-            Deal.status == '受注',
+            db.or_(Deal.status == '受注', Deal.status == 'WON'),
             Deal.revenue_month == last_revenue_month
         ).scalar()
     else:
@@ -2897,7 +2897,7 @@ def api_dashboard_kpis():
         current_month_revenue = db.session.query(
             db.func.coalesce(db.func.sum(Deal.amount), 0)
         ).filter(
-            Deal.status == '受注',
+            db.or_(Deal.status == '受注', Deal.status == 'WON'),
             Deal.created_at >= current_period_start,
             Deal.created_at <= current_period_end
         ).scalar()
@@ -2905,7 +2905,7 @@ def api_dashboard_kpis():
         last_month_revenue = db.session.query(
             db.func.coalesce(db.func.sum(Deal.amount), 0)
         ).filter(
-            Deal.status == '受注',
+            db.or_(Deal.status == '受注', Deal.status == 'WON'),
             Deal.created_at >= last_period_start,
             Deal.created_at <= last_period_end
         ).scalar()
