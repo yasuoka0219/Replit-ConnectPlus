@@ -2873,22 +2873,42 @@ def api_dashboard_kpis():
         last_period_start = current_period_start - relativedelta(months=1)
         last_period_end = current_period_start - relativedelta(days=1)
     
-    # Monthly revenue (won deals)
-    current_month_revenue = db.session.query(
-        db.func.coalesce(db.func.sum(Deal.amount), 0)
-    ).filter(
-        Deal.status == '受注',
-        Deal.created_at >= current_period_start,
-        Deal.created_at <= current_period_end
-    ).scalar()
-    
-    last_month_revenue = db.session.query(
-        db.func.coalesce(db.func.sum(Deal.amount), 0)
-    ).filter(
-        Deal.status == '受注',
-        Deal.created_at >= last_period_start,
-        Deal.created_at <= last_period_end
-    ).scalar()
+    # Monthly revenue (won deals) - using revenue_month field
+    # Convert date ranges to YYYY-MM format for revenue_month matching
+    if period in ['current_month', 'last_month']:
+        current_revenue_month = current_period_start.strftime('%Y-%m')
+        last_revenue_month = last_period_start.strftime('%Y-%m')
+        
+        current_month_revenue = db.session.query(
+            db.func.coalesce(db.func.sum(Deal.amount), 0)
+        ).filter(
+            Deal.status == '受注',
+            Deal.revenue_month == current_revenue_month
+        ).scalar()
+        
+        last_month_revenue = db.session.query(
+            db.func.coalesce(db.func.sum(Deal.amount), 0)
+        ).filter(
+            Deal.status == '受注',
+            Deal.revenue_month == last_revenue_month
+        ).scalar()
+    else:
+        # For year or custom range, use created_at as fallback
+        current_month_revenue = db.session.query(
+            db.func.coalesce(db.func.sum(Deal.amount), 0)
+        ).filter(
+            Deal.status == '受注',
+            Deal.created_at >= current_period_start,
+            Deal.created_at <= current_period_end
+        ).scalar()
+        
+        last_month_revenue = db.session.query(
+            db.func.coalesce(db.func.sum(Deal.amount), 0)
+        ).filter(
+            Deal.status == '受注',
+            Deal.created_at >= last_period_start,
+            Deal.created_at <= last_period_end
+        ).scalar()
     
     # Pipeline value by stage
     pipeline_by_stage = db.session.query(
