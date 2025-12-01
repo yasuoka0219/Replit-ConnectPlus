@@ -1764,7 +1764,8 @@ def create_deal():
             stage_entered_at=datetime.utcnow(),
             closed_at=closed_at,
             assignee_id=assignee_id,
-            team_id=team_id
+            team_id=team_id,
+            revenue_month=request.form.get('revenue_month') or None
         )
         
         # Set win/loss reasons
@@ -1842,6 +1843,7 @@ def edit_deal(id):
         deal.meeting_minutes = request.form.get('meeting_minutes')
         deal.next_action = request.form.get('next_action')
         deal.appointment_date = appointment_date
+        deal.revenue_month = request.form.get('revenue_month') or None
         
         # Parse and set assignee_id
         assignee_id = request.form.get('assignee_id')

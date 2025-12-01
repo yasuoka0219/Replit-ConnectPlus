@@ -153,6 +153,7 @@ class Deal(db.Model):
     lost_reason_category = db.Column(db.String(100), nullable=True, index=True)
     lost_reason_detail = db.Column(db.Text, nullable=True)
     closed_at = db.Column(db.DateTime, nullable=True, index=True)
+    revenue_month = db.Column(db.String(7), nullable=True, index=True)  # 'YYYY-MM' format
     
     # Relationships
     assignee_user = db.relationship('User', foreign_keys=[assignee_id], backref='assigned_deals')
