@@ -171,12 +171,6 @@ class Deal(db.Model):
             return (datetime.utcnow() - self.stage_entered_at).days
         return 0
     
-    @property
-    def revenue_month(self):
-        """Get revenue month (year-month) from closed_at date"""
-        if self.status == 'WON' and self.closed_at:
-            return self.closed_at.strftime('%Y-%m')
-        return None
     
     def get_assignee_name(self):
         """Get assignee name (from User if assignee_id exists, else from assignee string)"""
