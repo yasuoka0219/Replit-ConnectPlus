@@ -2881,10 +2881,10 @@ def api_dashboard_kpis():
     elif period == 'current_year':
         current_year = current_period_start.year
         current_revenue_month_start = f'{current_year}-01'
-        current_revenue_month_end = f'{current_year}-12'
+        current_revenue_month_end = today.strftime('%Y-%m')  # 当月まで（当日ではなく月単位）
         last_year = current_year - 1
         last_revenue_month_start = f'{last_year}-01'
-        last_revenue_month_end = f'{last_year}-12'
+        last_revenue_month_end = (today - relativedelta(years=1)).strftime('%Y-%m')
     else:  # custom
         current_revenue_month_start = current_period_start.strftime('%Y-%m')
         current_revenue_month_end = current_period_end.strftime('%Y-%m')
