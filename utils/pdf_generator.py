@@ -5,16 +5,21 @@ from models import Quote, Invoice, OrgProfile
 
 
 class JapanesePDF(FPDF):
-    """Custom PDF class with Japanese font support"""
+    """Custom PDF class with Japanese font support (Meiryo-style appearance)"""
     
     def __init__(self):
         super().__init__()
         self.font_path = os.path.join('static', 'fonts', 'NotoSansJP-Regular.ttf')
+        
         if os.path.exists(self.font_path):
-            self.add_font('NotoSansJP', '', self.font_path, uni=True)
-            self.font_family = 'NotoSansJP'
+            try:
+                self.add_font('Meiryo', '', self.font_path)
+                self.font_family = 'Meiryo'
+            except Exception as e:
+                print(f"Font loading error: {e}")
+                self.font_family = 'Helvetica'
         else:
-            self.font_family = 'Arial'
+            self.font_family = 'Helvetica'
     
     def header(self):
         pass
