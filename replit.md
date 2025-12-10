@@ -3,10 +3,13 @@
 ## Overview
 CONNECT+ is a lightweight CRM system designed for sales teams, centralizing customer, deal, and task management. It aims to provide a simple, stylish, and intuitive management tool with a modern UI inspired by Notion and Linear. The project's ambition is to streamline sales operations through enhanced dashboards, comprehensive data management, and insightful analytics.
 
+**Latest Version:** v3.0.0 (Schema expansion for advanced analytics)
+
 ## User Preferences
 - デザイン: NotionやLinear風のモダンで直感的なUI
 - レスポンシブ対応（PC・タブレット）
 - 日本語インターフェース
+- データの安全性：既存機能の破壊的変更を避け、スキーマ拡張のみで機能追加
 
 ## System Architecture
 CONNECT+ is built as a full-stack Flask application using Python for the backend and PostgreSQL for the database. Frontend utilizes Flask templating with TailwindCSS for styling, ensuring a modern and intuitive user experience. Chart.js is integrated for data visualization on the dashboard.
