@@ -1139,17 +1139,28 @@ def import_companies():
 @app.route('/companies/create', methods=['GET', 'POST'])
 @login_required
 def create_company():
+    from models import CompanySize, CustomerStatus
     if request.method == 'POST':
         # Validate industry selection
         industry = request.form.get('industry')
         if industry and industry not in INDUSTRY_CATEGORIES:
             flash('無効な業界が選択されています。', 'error')
-            return render_template('company_form.html', company=None, industries=INDUSTRY_CATEGORIES)
+            company_sizes = CompanySize.query.order_by(CompanySize.sort_order).all()
+            customer_statuses = CustomerStatus.query.order_by(CustomerStatus.sort_order).all()
+            return render_template('company_form.html', company=None, industries=INDUSTRY_CATEGORIES, 
+                                 company_sizes=company_sizes, customer_statuses=customer_statuses)
+        
+        # Handle company_size_id and customer_status_id
+        company_size_id = request.form.get('company_size_id')
+        customer_status_id = request.form.get('customer_status_id')
         
         company = Company(
             name=request.form.get('name'),
             industry=industry if industry else None,
             location=request.form.get('location'),
+            area=request.form.get('area') or None,
+            company_size_id=int(company_size_id) if company_size_id and company_size_id != '' else None,
+            customer_status_id=int(customer_status_id) if customer_status_id and customer_status_id != '' else None,
             memo=request.form.get('memo')
         )
         db.session.add(company)
@@ -1157,7 +1168,10 @@ def create_company():
         flash('企業を追加しました。', 'success')
         return redirect(url_for('companies'))
     
-    return render_template('company_form.html', company=None, industries=INDUSTRY_CATEGORIES)
+    company_sizes = CompanySize.query.order_by(CompanySize.sort_order).all()
+    customer_statuses = CustomerStatus.query.order_by(CustomerStatus.sort_order).all()
+    return render_template('company_form.html', company=None, industries=INDUSTRY_CATEGORIES,
+                         company_sizes=company_sizes, customer_statuses=customer_statuses)
 
 @app.route('/companies/<int:id>')
 @login_required
@@ -1175,6 +1189,7 @@ def view_company(id):
 @app.route('/companies/<int:id>/edit', methods=['GET', 'POST'])
 @login_required
 def edit_company(id):
+    from models import CompanySize, CustomerStatus
     company = Company.query.get_or_404(id)
     
     if request.method == 'POST':
@@ -1182,17 +1197,33 @@ def edit_company(id):
         industry = request.form.get('industry')
         if industry and industry not in INDUSTRY_CATEGORIES:
             flash('無効な業界が選択されています。', 'error')
-            return render_template('company_form.html', company=company, industries=INDUSTRY_CATEGORIES)
+            company_sizes = CompanySize.query.order_by(CompanySize.sort_order).all()
+            customer_statuses = CustomerStatus.query.order_by(CustomerStatus.sort_order).all()
+            return render_template('company_form.html', company=company, industries=INDUSTRY_CATEGORIES, 
+                                 company_sizes=company_sizes, customer_statuses=customer_statuses)
         
         company.name = request.form.get('name')
         company.industry = industry if industry else None
         company.location = request.form.get('location')
+        company.area = request.form.get('area') or None
         company.memo = request.form.get('memo')
+        
+        # Handle company_size_id
+        company_size_id = request.form.get('company_size_id')
+        company.company_size_id = int(company_size_id) if company_size_id and company_size_id != '' else None
+        
+        # Handle customer_status_id
+        customer_status_id = request.form.get('customer_status_id')
+        company.customer_status_id = int(customer_status_id) if customer_status_id and customer_status_id != '' else None
+        
         db.session.commit()
         flash('企業情報を更新しました。', 'success')
         return redirect(url_for('view_company', id=id))
     
-    return render_template('company_form.html', company=company, industries=INDUSTRY_CATEGORIES)
+    company_sizes = CompanySize.query.order_by(CompanySize.sort_order).all()
+    customer_statuses = CustomerStatus.query.order_by(CustomerStatus.sort_order).all()
+    return render_template('company_form.html', company=company, industries=INDUSTRY_CATEGORIES,
+                         company_sizes=company_sizes, customer_statuses=customer_statuses)
 
 @app.route('/companies/<int:id>/delete', methods=['POST'])
 @login_required
@@ -1785,8 +1816,14 @@ def create_deal():
     companies = Company.query.all()
     users = User.query.order_by(User.name).all()
     teams = Team.query.order_by(Team.name).all()
+    from models import LeadSource
+    companies = Company.query.all()
+    users = User.query.order_by(User.name).all()
+    teams = Team.query.order_by(Team.name).all()
+    lead_sources = LeadSource.query.order_by(LeadSource.sort_order).all()
     return render_template('deal_form.html', deal=None, companies=companies, users=users, teams=teams,
-                         win_reasons=WIN_REASON_CATEGORIES, loss_reasons=LOSS_REASON_CATEGORIES)
+                         win_reasons=WIN_REASON_CATEGORIES, loss_reasons=LOSS_REASON_CATEGORIES,
+                         lead_sources=lead_sources)
 
 @app.route('/deals/<int:id>')
 @login_required
@@ -1854,6 +1891,43 @@ def edit_deal(id):
         team_id = request.form.get('team_id')
         deal.team_id = int(team_id) if team_id and team_id != '' else None
         
+        # Parse and set v3.0.0 analysis fields
+        lead_source_id = request.form.get('lead_source_id')
+        deal.lead_source_id = int(lead_source_id) if lead_source_id and lead_source_id != '' else None
+        deal.new_or_existing = request.form.get('new_or_existing') or None
+        deal.gross_profit = float(request.form.get('gross_profit', 0)) if request.form.get('gross_profit') else None
+        deal.probability_rank = request.form.get('probability_rank') or None
+        deal.competitor_name = request.form.get('competitor_name') or None
+        
+        # Parse date fields
+        first_contact_date_str = request.form.get('first_contact_date')
+        if first_contact_date_str:
+            try:
+                deal.first_contact_date = datetime.strptime(first_contact_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                deal.first_contact_date = None
+        
+        proposal_date_str = request.form.get('proposal_date')
+        if proposal_date_str:
+            try:
+                deal.proposal_date = datetime.strptime(proposal_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                deal.proposal_date = None
+        
+        won_date_str = request.form.get('won_date')
+        if won_date_str:
+            try:
+                deal.won_date = datetime.strptime(won_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                deal.won_date = None
+        
+        lost_date_str = request.form.get('lost_date')
+        if lost_date_str:
+            try:
+                deal.lost_date = datetime.strptime(lost_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                deal.lost_date = None
+        
         # Set win/loss reasons
         if new_status == 'WON':
             deal.win_reason_category = request.form.get('win_reason_category') or None
@@ -1872,11 +1946,14 @@ def edit_deal(id):
         flash('案件情報を更新しました。', 'success')
         return redirect(url_for('deals'))
     
+    from models import LeadSource
     companies = Company.query.all()
     users = User.query.order_by(User.name).all()
     teams = Team.query.order_by(Team.name).all()
+    lead_sources = LeadSource.query.order_by(LeadSource.sort_order).all()
     return render_template('deal_form.html', deal=deal, companies=companies, users=users, teams=teams,
-                         win_reasons=WIN_REASON_CATEGORIES, loss_reasons=LOSS_REASON_CATEGORIES)
+                         win_reasons=WIN_REASON_CATEGORIES, loss_reasons=LOSS_REASON_CATEGORIES,
+                         lead_sources=lead_sources)
 
 @app.route('/deals/<int:id>/delete', methods=['POST'])
 @login_required
