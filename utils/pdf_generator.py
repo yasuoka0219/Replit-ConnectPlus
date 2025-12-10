@@ -9,7 +9,7 @@ class JapanesePDF(FPDF):
     
     def __init__(self):
         super().__init__()
-        self.font_path = os.path.join('static', 'fonts', 'NotoSansJP-Regular.ttf')
+        self.font_path = os.path.join('static', 'fonts', 'MPLUSRounded1c-Regular.ttf')
         
         if os.path.exists(self.font_path):
             try:
