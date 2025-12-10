@@ -3110,11 +3110,15 @@ def api_dashboard_kpis():
     
     stale_count = sum(1 for deal in stale_deals if deal.days_in_stage and deal.days_in_stage >= 30)
     
-    # Activities in selected period
-    activities_count = Activity.query.filter(
-        Activity.happened_at >= current_period_start,
-        Activity.happened_at <= current_period_end
-    ).count()
+    # Activities in selected period - use raw SQL to avoid "count" column conflict
+    activities_sql = db.text("""
+        SELECT COUNT(*) FROM activities
+        WHERE happened_at >= :start_date AND happened_at <= :end_date
+    """)
+    activities_count = db.session.execute(activities_sql, {
+        'start_date': current_period_start,
+        'end_date': current_period_end
+    }).scalar() or 0
     
     return jsonify({
         'revenue': {
@@ -4893,14 +4897,18 @@ def api_analytics_assignee_activity():
     start_date, end_date = get_cross_tab_date_range()
     
     # Activity counts by user (using happened_at for period filtering)
-    activity_stats = db.session.query(
-        Activity.user_id,
-        db.func.coalesce(db.func.sum(Activity.count), 0).label('activity_count')
-    ).filter(
-        Activity.happened_at >= datetime.combine(start_date, datetime.min.time()),
-        Activity.happened_at <= datetime.combine(end_date, datetime.max.time())
-    ).group_by(Activity.user_id).all()
-    activity_map = {a.user_id: a.activity_count for a in activity_stats}
+    # Use raw SQL to avoid ORM issues with "count" column name
+    activity_sql = db.text("""
+        SELECT user_id, SUM(COALESCE(count, 1)) as activity_count
+        FROM activities
+        WHERE happened_at >= :start_date AND happened_at <= :end_date
+        GROUP BY user_id
+    """)
+    activity_result = db.session.execute(activity_sql, {
+        'start_date': datetime.combine(start_date, datetime.min.time()),
+        'end_date': datetime.combine(end_date, datetime.max.time())
+    }).fetchall()
+    activity_map = {row[0]: (row[1] or 0) for row in activity_result}
     
     # Deal stats by assignee (using won_date/lost_date for period filtering)
     deal_stats = db.session.query(
