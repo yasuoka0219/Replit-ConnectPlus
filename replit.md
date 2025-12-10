@@ -23,6 +23,15 @@ CONNECT+ is built as a full-stack Flask application using Python for the backend
 *   **Task Management:** Manages ToDo items linked to deals, with due dates and assignees, filterable by status.
 *   **Quotation & Invoice Management:** Features for creating, editing, and issuing quotations and invoices with dynamic item lists, tax calculation, auto-numbering (YYYY-####), and PDF generation using `fpdf2` with Japanese font support. Includes an organization profile setup for company details on documents.
 *   **Conversion Analytics:** Dashboard section for win/loss analysis, displaying win rates, and top 5 win/loss reasons visualized with horizontal bar charts, integrated with period selection.
+*   **Cross-Tabulation Analytics (v3.0.0):** Advanced analytics dashboard featuring:
+    - KPI Summary cards (revenue, new wins, win rate, new leads)
+    - Lead Source × Results analysis (appointment rate, win rate, avg amount)
+    - Industry × Win Rate / Revenue cross-tabulation
+    - Assignee × Activity × Win Rate analysis
+    - Stage Funnel visualization with transition rates
+    - Monthly Trend charts (revenue, new customers, win rate over time)
+    - Lost Reason analysis with mode toggle (by industry/by assignee)
+    - All charts connected to period filter for dynamic analysis
 *   **User/Account Settings:** Basic login information display and theme switching (dark/light mode).
 
 **UI/UX Decisions:**
