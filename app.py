@@ -4723,6 +4723,450 @@ def list_backups_api():
         return jsonify({'success': False, 'error': str(e)}), 400
 
 
+# ==========================================
+# Cross-Tabulation Analytics APIs (v3.0.0)
+# ==========================================
+
+def get_cross_tab_date_range():
+    """Helper to get date range from request parameters"""
+    from datetime import date
+    from dateutil.relativedelta import relativedelta
+    
+    period = request.args.get('period', 'current_month')
+    today = date.today()
+    
+    if period == 'current_month':
+        start_date = date(today.year, today.month, 1)
+        end_date = today
+    elif period == 'last_month':
+        start_date = date(today.year, today.month, 1) - relativedelta(months=1)
+        end_date = date(today.year, today.month, 1) - relativedelta(days=1)
+    elif period == 'last_3_months':
+        start_date = today - relativedelta(months=3)
+        end_date = today
+    elif period == 'last_6_months':
+        start_date = today - relativedelta(months=6)
+        end_date = today
+    elif period == 'current_year':
+        start_date = date(today.year, 1, 1)
+        end_date = today
+    elif period == 'custom':
+        start_str = request.args.get('start_date')
+        end_str = request.args.get('end_date')
+        try:
+            start_date = datetime.strptime(start_str, '%Y-%m-%d').date() if start_str else date(today.year, today.month, 1)
+            end_date = datetime.strptime(end_str, '%Y-%m-%d').date() if end_str else today
+        except:
+            start_date = date(today.year, today.month, 1)
+            end_date = today
+    else:
+        start_date = date(today.year, today.month, 1)
+        end_date = today
+    
+    return start_date, end_date
+
+
+@app.route('/api/analytics/lead-source')
+@login_required
+def api_analytics_lead_source():
+    """Cross-tabulation: Lead Source × Results (Optimized with aggregation queries)"""
+    from models import LeadSource
+    
+    start_date, end_date = get_cross_tab_date_range()
+    
+    # Use aggregation query to avoid N+1
+    # Subquery for deals with outcomes in period (won or lost)
+    lead_source_stats = db.session.query(
+        Deal.lead_source_id,
+        db.func.count(Deal.id).label('total_deals'),
+        db.func.sum(db.case((Deal.status == 'WON', 1), else_=0)).label('won_count'),
+        db.func.sum(db.case((Deal.first_contact_date != None, 1), else_=0)).label('has_first_contact'),
+        db.func.sum(db.case((Deal.status == 'WON', Deal.amount), else_=0)).label('won_amount')
+    ).filter(
+        db.or_(
+            db.and_(Deal.status == 'WON', Deal.won_date >= start_date, Deal.won_date <= end_date),
+            db.and_(Deal.status == 'LOST', Deal.lost_date >= start_date, Deal.lost_date <= end_date),
+            db.and_(Deal.status == 'OPEN', Deal.created_at >= datetime.combine(start_date, datetime.min.time()))
+        )
+    ).group_by(Deal.lead_source_id).all()
+    
+    # Build lookup
+    stats_map = {s.lead_source_id: s for s in lead_source_stats}
+    
+    # Get all lead sources
+    lead_sources = LeadSource.query.order_by(LeadSource.sort_order).all()
+    
+    results = []
+    for ls in lead_sources:
+        stats = stats_map.get(ls.id)
+        if not stats:
+            continue
+            
+        total = stats.total_deals or 0
+        won = stats.won_count or 0
+        has_fc = stats.has_first_contact or 0
+        amount = stats.won_amount or 0
+        
+        results.append({
+            'lead_source': ls.name,
+            'lead_count': total,
+            'appointment_rate': round(has_fc / total * 100, 1) if total > 0 else 0,
+            'win_rate': round(won / total * 100, 1) if total > 0 else 0,
+            'avg_amount': round(amount / won) if won > 0 else 0,
+            'avg_ltv': round(amount / won) if won > 0 else 0  # Simplified LTV
+        })
+    
+    # Add deals without lead_source
+    unknown_stats = stats_map.get(None)
+    if unknown_stats and unknown_stats.total_deals > 0:
+        total = unknown_stats.total_deals or 0
+        won = unknown_stats.won_count or 0
+        has_fc = unknown_stats.has_first_contact or 0
+        amount = unknown_stats.won_amount or 0
+        results.append({
+            'lead_source': '未設定',
+            'lead_count': total,
+            'appointment_rate': round(has_fc / total * 100, 1) if total > 0 else 0,
+            'win_rate': round(won / total * 100, 1) if total > 0 else 0,
+            'avg_amount': round(amount / won) if won > 0 else 0,
+            'avg_ltv': 0
+        })
+    
+    return jsonify({'data': results, 'period': {'start': str(start_date), 'end': str(end_date)}})
+
+
+@app.route('/api/analytics/industry')
+@login_required
+def api_analytics_industry():
+    """Cross-tabulation: Industry × Win Rate / Revenue (Optimized)"""
+    start_date, end_date = get_cross_tab_date_range()
+    
+    # Use aggregation query with proper date filtering
+    industry_stats = db.session.query(
+        Company.industry,
+        db.func.count(Deal.id).label('total_deals'),
+        db.func.sum(db.case((Deal.status == 'WON', 1), else_=0)).label('won_count'),
+        db.func.sum(db.case((Deal.status == 'WON', Deal.amount), else_=0)).label('won_amount'),
+        db.func.avg(db.case(
+            (db.and_(Deal.status == 'WON', Deal.first_contact_date != None, Deal.won_date != None),
+             Deal.won_date - Deal.first_contact_date),
+            else_=None
+        )).label('avg_lead_time')
+    ).join(Company).filter(
+        Company.industry != None,
+        Company.industry != '',
+        db.or_(
+            db.and_(Deal.status == 'WON', Deal.won_date >= start_date, Deal.won_date <= end_date),
+            db.and_(Deal.status == 'LOST', Deal.lost_date >= start_date, Deal.lost_date <= end_date),
+            db.and_(Deal.status == 'OPEN', Deal.created_at >= datetime.combine(start_date, datetime.min.time()))
+        )
+    ).group_by(Company.industry).all()
+    
+    results = []
+    for stats in industry_stats:
+        if not stats.industry:
+            continue
+            
+        total = stats.total_deals or 0
+        won = stats.won_count or 0
+        revenue = stats.won_amount or 0
+        
+        results.append({
+            'industry': stats.industry,
+            'deal_count': total,
+            'win_rate': round(won / total * 100, 1) if total > 0 else 0,
+            'total_revenue': revenue,
+            'avg_amount': round(revenue / won) if won > 0 else 0,
+            'avg_lead_time_days': round(stats.avg_lead_time) if stats.avg_lead_time else None
+        })
+    
+    # Sort by total_revenue desc
+    results.sort(key=lambda x: x['total_revenue'], reverse=True)
+    
+    return jsonify({'data': results, 'period': {'start': str(start_date), 'end': str(end_date)}})
+
+
+@app.route('/api/analytics/assignee-activity')
+@login_required
+def api_analytics_assignee_activity():
+    """Cross-tabulation: Assignee × Activity × Win Rate (Optimized)"""
+    start_date, end_date = get_cross_tab_date_range()
+    
+    # Activity counts by user (using happened_at for period filtering)
+    activity_stats = db.session.query(
+        Activity.user_id,
+        db.func.coalesce(db.func.sum(Activity.count), 0).label('activity_count')
+    ).filter(
+        Activity.happened_at >= datetime.combine(start_date, datetime.min.time()),
+        Activity.happened_at <= datetime.combine(end_date, datetime.max.time())
+    ).group_by(Activity.user_id).all()
+    activity_map = {a.user_id: a.activity_count for a in activity_stats}
+    
+    # Deal stats by assignee (using won_date/lost_date for period filtering)
+    deal_stats = db.session.query(
+        Deal.assignee_id,
+        db.func.count(Deal.id).label('total_deals'),
+        db.func.sum(db.case((Deal.status == 'WON', 1), else_=0)).label('won_count'),
+        db.func.sum(db.case((Deal.status == 'WON', Deal.amount), else_=0)).label('won_amount')
+    ).filter(
+        Deal.assignee_id != None,
+        db.or_(
+            db.and_(Deal.status == 'WON', Deal.won_date >= start_date, Deal.won_date <= end_date),
+            db.and_(Deal.status == 'LOST', Deal.lost_date >= start_date, Deal.lost_date <= end_date),
+            db.and_(Deal.status == 'OPEN', Deal.created_at >= datetime.combine(start_date, datetime.min.time()))
+        )
+    ).group_by(Deal.assignee_id).all()
+    deal_map = {d.assignee_id: d for d in deal_stats}
+    
+    # Get users with either activities or deals
+    user_ids = set(activity_map.keys()) | set(deal_map.keys())
+    users = User.query.filter(User.id.in_(user_ids)).order_by(User.name).all() if user_ids else []
+    
+    results = []
+    for user in users:
+        activity_count = activity_map.get(user.id, 0)
+        d_stats = deal_map.get(user.id)
+        
+        total_deals = d_stats.total_deals if d_stats else 0
+        won_count = d_stats.won_count if d_stats else 0
+        total_revenue = d_stats.won_amount if d_stats else 0
+        
+        results.append({
+            'assignee': user.name,
+            'assignee_id': user.id,
+            'activity_count': int(activity_count),
+            'deal_count': total_deals,
+            'won_count': won_count,
+            'win_rate': round(won_count / total_deals * 100, 1) if total_deals > 0 else 0,
+            'total_revenue': total_revenue or 0
+        })
+    
+    return jsonify({'data': results, 'period': {'start': str(start_date), 'end': str(end_date)}})
+
+
+@app.route('/api/analytics/stage-funnel')
+@login_required
+def api_analytics_stage_funnel():
+    """Cross-tabulation: Stage Funnel Analysis (Optimized)"""
+    start_date, end_date = get_cross_tab_date_range()
+    
+    stage_order = ['リード', 'アポ', 'ヒアリング', '見積・提案', '最終調整', '受注', '失注']
+    
+    # Use aggregation query for current stage distribution
+    stage_stats = db.session.query(
+        Deal.stage,
+        db.func.count(Deal.id).label('count'),
+        db.func.sum(Deal.amount).label('amount')
+    ).filter(
+        Deal.stage.in_(stage_order)
+    ).group_by(Deal.stage).all()
+    
+    stats_map = {s.stage: {'count': s.count or 0, 'amount': s.amount or 0} for s in stage_stats}
+    
+    results = []
+    prev_count = None
+    
+    for stage_name in stage_order:
+        stats = stats_map.get(stage_name, {'count': 0, 'amount': 0})
+        count = stats['count']
+        amount = stats['amount']
+        
+        # Transition rate from previous stage
+        transition_rate = None
+        if prev_count is not None and prev_count > 0:
+            transition_rate = round(count / prev_count * 100, 1)
+        
+        results.append({
+            'stage': stage_name,
+            'count': count,
+            'amount': amount,
+            'transition_rate': transition_rate,
+            'avg_days': 0  # Simplified - avg stage time requires more complex query
+        })
+        
+        if stage_name not in ['受注', '失注']:
+            prev_count = count
+    
+    return jsonify({'data': results, 'period': {'start': str(start_date), 'end': str(end_date)}})
+
+
+@app.route('/api/analytics/lost-reason')
+@login_required
+def api_analytics_lost_reason():
+    """Cross-tabulation: Lost Reason × Industry / Assignee"""
+    from models import LostReason
+    
+    start_date, end_date = get_cross_tab_date_range()
+    mode = request.args.get('mode', 'industry')  # 'industry' or 'assignee'
+    
+    # Get lost deals
+    lost_deals = Deal.query.filter(
+        Deal.status == 'LOST',
+        Deal.lost_date >= start_date,
+        Deal.lost_date <= end_date
+    ).all()
+    
+    if mode == 'industry':
+        # Group by lost_reason_category
+        reason_data = {}
+        for d in lost_deals:
+            reason = d.lost_reason_category or '未設定'
+            if reason not in reason_data:
+                reason_data[reason] = {'deals': [], 'industries': {}}
+            reason_data[reason]['deals'].append(d)
+            
+            # Get industry
+            if d.company:
+                ind = d.company.industry or '未設定'
+                reason_data[reason]['industries'][ind] = reason_data[reason]['industries'].get(ind, 0) + 1
+        
+        results = []
+        for reason, data in reason_data.items():
+            # Get top 3 industries
+            sorted_industries = sorted(data['industries'].items(), key=lambda x: x[1], reverse=True)[:3]
+            top_industries = [{'name': k, 'count': v} for k, v in sorted_industries]
+            
+            results.append({
+                'lost_reason': reason,
+                'deal_count': len(data['deals']),
+                'total_amount': sum(d.amount or 0 for d in data['deals']),
+                'top_industries': top_industries
+            })
+        
+        results.sort(key=lambda x: x['deal_count'], reverse=True)
+        
+    else:  # mode == 'assignee'
+        # Group by assignee
+        assignee_data = {}
+        for d in lost_deals:
+            assignee_name = d.get_assignee_name() or '未割当'
+            if assignee_name not in assignee_data:
+                assignee_data[assignee_name] = {}
+            
+            reason = d.lost_reason_category or '未設定'
+            assignee_data[assignee_name][reason] = assignee_data[assignee_name].get(reason, 0) + 1
+        
+        results = []
+        for assignee, reasons in assignee_data.items():
+            row = {'assignee': assignee}
+            row['reasons'] = reasons
+            row['total'] = sum(reasons.values())
+            results.append(row)
+        
+        results.sort(key=lambda x: x['total'], reverse=True)
+    
+    return jsonify({'data': results, 'mode': mode, 'period': {'start': str(start_date), 'end': str(end_date)}})
+
+
+@app.route('/api/analytics/monthly-trend')
+@login_required
+def api_analytics_monthly_trend():
+    """Cross-tabulation: Monthly Trend (Revenue, New Customers, Win Rate)"""
+    from dateutil.relativedelta import relativedelta
+    from datetime import date
+    
+    months = int(request.args.get('months', 6))
+    today = date.today()
+    
+    results = []
+    for i in range(months - 1, -1, -1):
+        month_date = today - relativedelta(months=i)
+        month_str = month_date.strftime('%Y-%m')
+        month_start = date(month_date.year, month_date.month, 1)
+        if i == 0:
+            month_end = today
+        else:
+            month_end = (month_start + relativedelta(months=1)) - relativedelta(days=1)
+        
+        # Revenue (won deals with revenue_month)
+        revenue = db.session.query(db.func.coalesce(db.func.sum(Deal.amount), 0)).filter(
+            db.or_(Deal.status == 'WON', Deal.status == '受注'),
+            Deal.revenue_month == month_str
+        ).scalar() or 0
+        
+        # New customers (companies created in this month)
+        new_customers = Company.query.filter(
+            Company.created_at >= datetime.combine(month_start, datetime.min.time()),
+            Company.created_at <= datetime.combine(month_end, datetime.max.time())
+        ).count()
+        
+        # Win rate (closed deals in this month)
+        closed_deals = Deal.query.filter(
+            Deal.closed_at >= datetime.combine(month_start, datetime.min.time()),
+            Deal.closed_at <= datetime.combine(month_end, datetime.max.time())
+        ).all()
+        
+        won_count = len([d for d in closed_deals if d.status == 'WON'])
+        total_closed = len(closed_deals)
+        win_rate = round(won_count / total_closed * 100, 1) if total_closed > 0 else 0
+        
+        results.append({
+            'month': month_str,
+            'month_label': f"{month_date.year}年{month_date.month}月",
+            'revenue': revenue,
+            'new_customers': new_customers,
+            'win_rate': win_rate,
+            'won_count': won_count,
+            'closed_count': total_closed
+        })
+    
+    return jsonify({'data': results})
+
+
+@app.route('/api/analytics/kpi-summary')
+@login_required
+def api_analytics_kpi_summary():
+    """Enhanced KPI Summary for Cross-Tab Dashboard (Optimized)"""
+    from datetime import date
+    
+    start_date, end_date = get_cross_tab_date_range()
+    
+    # Revenue (won in period by won_date)
+    revenue = db.session.query(db.func.coalesce(db.func.sum(Deal.amount), 0)).filter(
+        Deal.status == 'WON',
+        Deal.won_date >= start_date,
+        Deal.won_date <= end_date
+    ).scalar() or 0
+    
+    # New deals (new_or_existing = 新規 and WON)
+    new_won_count = db.session.query(db.func.count(Deal.id)).filter(
+        Deal.new_or_existing == '新規',
+        Deal.status == 'WON',
+        Deal.won_date >= start_date,
+        Deal.won_date <= end_date
+    ).scalar() or 0
+    
+    # Win rate (closed deals in period using won_date/lost_date)
+    won_in_period = db.session.query(db.func.count(Deal.id)).filter(
+        Deal.status == 'WON',
+        Deal.won_date >= start_date,
+        Deal.won_date <= end_date
+    ).scalar() or 0
+    
+    lost_in_period = db.session.query(db.func.count(Deal.id)).filter(
+        Deal.status == 'LOST',
+        Deal.lost_date >= start_date,
+        Deal.lost_date <= end_date
+    ).scalar() or 0
+    
+    total_closed = won_in_period + lost_in_period
+    win_rate = round(won_in_period / total_closed * 100, 1) if total_closed > 0 else 0
+    
+    # New leads (first_contact_date in period)
+    new_leads = db.session.query(db.func.count(Deal.id)).filter(
+        Deal.first_contact_date >= start_date,
+        Deal.first_contact_date <= end_date
+    ).scalar() or 0
+    
+    return jsonify({
+        'revenue': float(revenue),
+        'new_won_count': new_won_count,
+        'win_rate': win_rate,
+        'new_leads': new_leads,
+        'period': {'start': str(start_date), 'end': str(end_date)}
+    })
+
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
