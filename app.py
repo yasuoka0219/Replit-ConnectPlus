@@ -744,6 +744,12 @@ def dashboard():
                          recent_tasks=recent_tasks,
                          industries=INDUSTRY_CATEGORIES)
 
+@app.route('/analytics')
+@login_required
+def analytics():
+    """Cross-tabulation analytics page"""
+    return render_template('analytics.html')
+
 @app.route('/companies')
 @login_required
 def companies():
