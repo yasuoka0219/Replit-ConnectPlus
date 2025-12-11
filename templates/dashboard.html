@@ -30,60 +30,58 @@
     </div>
 </div>
 
-<!-- Main KPI Cards (4 key metrics) -->
+<!-- Main KPI Cards (4 key metrics) - Low saturation colors -->
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-    <div class="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-5 text-white">
+    <div class="bg-gradient-to-br from-emerald-400 to-emerald-500 rounded-xl shadow-lg p-5 text-white">
         <div class="flex justify-between items-start mb-3">
             <div class="flex-1 min-w-0">
-                <p class="text-green-100 text-sm font-medium mb-1" id="revenue-label">今月の売上</p>
+                <p class="text-emerald-50 text-sm font-medium mb-1" id="revenue-label">今月の売上</p>
                 <p class="text-2xl font-bold leading-tight" id="current-revenue">¥0</p>
             </div>
             <div class="ml-3 flex-shrink-0 px-2 py-1 bg-white bg-opacity-20 rounded-lg text-xs font-medium whitespace-nowrap" id="revenue-growth">
                 +0%
             </div>
         </div>
-        <p class="text-green-100 text-xs"><span id="comparison-label">前月</span>: <span id="last-revenue">¥0</span></p>
+        <p class="text-emerald-100 text-xs"><span id="comparison-label">前月</span>: <span id="last-revenue">¥0</span></p>
     </div>
     
-    <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-5 text-white">
+    <div class="bg-gradient-to-br from-sky-400 to-sky-500 rounded-xl shadow-lg p-5 text-white">
         <div class="flex justify-between items-start mb-3">
             <div class="flex-1 min-w-0">
-                <p class="text-blue-100 text-sm font-medium mb-1">パイプライン総額</p>
+                <p class="text-sky-50 text-sm font-medium mb-1">パイプライン総額</p>
                 <p class="text-2xl font-bold leading-tight" id="pipeline-value">¥0</p>
             </div>
-            <div class="ml-3 flex-shrink-0 px-2 py-1 bg-white bg-opacity-20 rounded-lg text-xs font-medium whitespace-nowrap" id="active-deals-count">
-                0件
+            <div class="ml-3 flex-shrink-0 px-2 py-1 bg-white bg-opacity-20 rounded-lg text-xs font-medium whitespace-nowrap" id="pipeline-growth">
+                +0%
             </div>
         </div>
-        <p class="text-blue-100 text-xs">進行中の案件</p>
+        <p class="text-sky-100 text-xs"><span id="active-deals-count">0</span>件進行中</p>
     </div>
     
-    <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-5 text-white">
+    <div class="bg-gradient-to-br from-violet-400 to-violet-500 rounded-xl shadow-lg p-5 text-white">
         <div class="flex justify-between items-start mb-3">
             <div class="flex-1 min-w-0">
-                <p class="text-purple-100 text-sm font-medium mb-1">成約率</p>
+                <p class="text-violet-50 text-sm font-medium mb-1">成約率</p>
                 <p class="text-2xl font-bold leading-tight" id="win-rate">0%</p>
             </div>
-            <div class="ml-3 flex-shrink-0 px-2 py-1 bg-white bg-opacity-20 rounded-lg text-xs font-medium whitespace-nowrap" id="won-deals">
-                0件受注
+            <div class="ml-3 flex-shrink-0 px-2 py-1 bg-white bg-opacity-20 rounded-lg text-xs font-medium whitespace-nowrap" id="win-rate-change">
+                +0pt
             </div>
         </div>
-        <p class="text-purple-100 text-xs">全クローズ案件から算出</p>
+        <p class="text-violet-100 text-xs"><span id="won-deals">0</span>件受注</p>
     </div>
     
-    <div class="bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl shadow-lg p-5 text-white">
+    <div class="bg-gradient-to-br from-orange-400 to-orange-500 rounded-xl shadow-lg p-5 text-white">
         <div class="flex justify-between items-start mb-3">
             <div class="flex-1 min-w-0">
-                <p class="text-amber-100 text-sm font-medium mb-1">新規リード数</p>
+                <p class="text-orange-50 text-sm font-medium mb-1">新規リード数</p>
                 <p class="text-2xl font-bold leading-tight" id="new-leads-count">0件</p>
             </div>
-            <div class="ml-3 flex-shrink-0 p-2 bg-white bg-opacity-20 rounded-lg">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
-                </svg>
+            <div class="ml-3 flex-shrink-0 px-2 py-1 bg-white bg-opacity-20 rounded-lg text-xs font-medium whitespace-nowrap" id="new-leads-growth">
+                +0%
             </div>
         </div>
-        <p class="text-amber-100 text-xs">期間内の新規案件</p>
+        <p class="text-orange-100 text-xs">前期間との比較</p>
     </div>
 </div>
 
@@ -507,13 +505,25 @@
                     ? 'px-3 py-1 bg-white bg-opacity-20 rounded-lg text-sm font-medium'
                     : 'px-3 py-1 bg-red-500 bg-opacity-30 rounded-lg text-sm font-medium';
                 
-                // Pipeline cards
+                // Pipeline cards with growth rate
                 document.getElementById('pipeline-value').textContent = formatCurrency(data.pipeline.total_value);
-                document.getElementById('active-deals-count').textContent = data.pipeline.active_deals + '件';
+                document.getElementById('active-deals-count').textContent = data.pipeline.active_deals;
+                const pipelineGrowthEl = document.getElementById('pipeline-growth');
+                const pipelineGrowth = data.pipeline.growth_rate || 0;
+                pipelineGrowthEl.textContent = (pipelineGrowth >= 0 ? '+' : '') + pipelineGrowth.toFixed(1) + '%';
+                pipelineGrowthEl.className = pipelineGrowth >= 0 
+                    ? 'ml-3 flex-shrink-0 px-2 py-1 bg-white bg-opacity-20 rounded-lg text-xs font-medium whitespace-nowrap'
+                    : 'ml-3 flex-shrink-0 px-2 py-1 bg-red-500 bg-opacity-30 rounded-lg text-xs font-medium whitespace-nowrap';
                 
-                // Win rate card
+                // Win rate card with change
                 document.getElementById('win-rate').textContent = data.conversion.win_rate + '%';
-                document.getElementById('won-deals').textContent = data.conversion.won + '件受注';
+                document.getElementById('won-deals').textContent = data.conversion.won;
+                const winRateChangeEl = document.getElementById('win-rate-change');
+                const winRateChange = data.conversion.win_rate_change || 0;
+                winRateChangeEl.textContent = (winRateChange >= 0 ? '+' : '') + winRateChange.toFixed(1) + 'pt';
+                winRateChangeEl.className = winRateChange >= 0 
+                    ? 'ml-3 flex-shrink-0 px-2 py-1 bg-white bg-opacity-20 rounded-lg text-xs font-medium whitespace-nowrap'
+                    : 'ml-3 flex-shrink-0 px-2 py-1 bg-red-500 bg-opacity-30 rounded-lg text-xs font-medium whitespace-nowrap';
                 
                 // Stale deals alert
                 const staleAlert = document.getElementById('stale-deals-alert');
@@ -524,9 +534,17 @@
                     staleAlert.classList.add('hidden');
                 }
                 
-                // New leads count
+                // New leads count with growth rate
                 if (data.new_leads !== undefined) {
                     document.getElementById('new-leads-count').textContent = data.new_leads + '件';
+                    const newLeadsGrowthEl = document.getElementById('new-leads-growth');
+                    if (newLeadsGrowthEl) {
+                        const newLeadsGrowth = data.new_leads_growth || 0;
+                        newLeadsGrowthEl.textContent = (newLeadsGrowth >= 0 ? '+' : '') + newLeadsGrowth.toFixed(1) + '%';
+                        newLeadsGrowthEl.className = newLeadsGrowth >= 0 
+                            ? 'ml-3 flex-shrink-0 px-2 py-1 bg-white bg-opacity-20 rounded-lg text-xs font-medium whitespace-nowrap'
+                            : 'ml-3 flex-shrink-0 px-2 py-1 bg-red-500 bg-opacity-30 rounded-lg text-xs font-medium whitespace-nowrap';
+                    }
                 }
             })
             .catch(error => {

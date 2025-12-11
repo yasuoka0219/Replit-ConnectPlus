@@ -3126,6 +3126,64 @@ def api_dashboard_kpis():
         Deal.created_at <= datetime.combine(current_period_end, datetime.max.time())
     ).count()
     
+    # Last period new leads for comparison
+    last_new_leads_count = Deal.query.filter(
+        Deal.created_at >= datetime.combine(last_period_start, datetime.min.time()),
+        Deal.created_at <= datetime.combine(last_period_end, datetime.max.time())
+    ).count()
+    
+    # Last period pipeline value for comparison
+    if period in ['current_month', 'last_month']:
+        last_revenue_month = last_period_start.strftime('%Y-%m')
+        last_pipeline_by_stage = db.session.query(
+            db.func.sum(Deal.amount).label('total')
+        ).filter(
+            pipeline_filter,
+            db.or_(Deal.revenue_month == last_revenue_month, Deal.revenue_month.is_(None))
+        ).scalar()
+        last_pipeline_total = float(last_pipeline_by_stage) if last_pipeline_by_stage else 0
+        
+        # Last period win rate
+        last_won_deals = Deal.query.filter(
+            db.or_(Deal.status == '受注', Deal.status == 'WON'),
+            Deal.revenue_month == last_revenue_month
+        ).count()
+        last_lost_deals = Deal.query.filter(
+            db.or_(Deal.status == '失注', Deal.status == 'LOST'),
+            Deal.revenue_month == last_revenue_month
+        ).count()
+    else:
+        last_pipeline_by_stage = db.session.query(
+            db.func.sum(Deal.amount).label('total')
+        ).filter(
+            pipeline_filter,
+            db.or_(
+                db.and_(Deal.revenue_month >= last_revenue_month_start, Deal.revenue_month <= last_revenue_month_end),
+                Deal.revenue_month.is_(None)
+            )
+        ).scalar()
+        last_pipeline_total = float(last_pipeline_by_stage) if last_pipeline_by_stage else 0
+        
+        # Last period win rate
+        last_won_deals = Deal.query.filter(
+            db.or_(Deal.status == '受注', Deal.status == 'WON'),
+            Deal.revenue_month >= last_revenue_month_start,
+            Deal.revenue_month <= last_revenue_month_end
+        ).count()
+        last_lost_deals = Deal.query.filter(
+            db.or_(Deal.status == '失注', Deal.status == 'LOST'),
+            Deal.revenue_month >= last_revenue_month_start,
+            Deal.revenue_month <= last_revenue_month_end
+        ).count()
+    
+    last_total_closed = last_won_deals + last_lost_deals
+    last_win_rate = (last_won_deals / last_total_closed * 100) if last_total_closed > 0 else 0
+    
+    # Calculate growth rates
+    pipeline_growth = ((total_pipeline - last_pipeline_total) / last_pipeline_total * 100) if last_pipeline_total > 0 else 0
+    win_rate_change = win_rate - last_win_rate
+    new_leads_growth = ((new_leads_count - last_new_leads_count) / last_new_leads_count * 100) if last_new_leads_count > 0 else 0
+    
     return jsonify({
         'revenue': {
             'current_month': float(current_month_revenue) if current_month_revenue else 0,
@@ -3134,13 +3192,17 @@ def api_dashboard_kpis():
         },
         'pipeline': {
             'total_value': float(total_pipeline) if total_pipeline else 0,
+            'last_value': last_pipeline_total,
+            'growth_rate': round(pipeline_growth, 1),
             'active_deals': active_deals,
             'by_stage': [{'stage': stage, 'value': float(value)} for stage, value in pipeline_by_stage]
         },
         'conversion': {
             'won': won_deals,
             'lost': lost_deals,
-            'win_rate': round(win_rate, 1)
+            'win_rate': round(win_rate, 1),
+            'last_win_rate': round(last_win_rate, 1),
+            'win_rate_change': round(win_rate_change, 1)
         },
         'top_companies': [{
             'id': comp[0],
@@ -3154,7 +3216,9 @@ def api_dashboard_kpis():
         'activities': {
             'this_month': activities_count
         },
-        'new_leads': new_leads_count
+        'new_leads': new_leads_count,
+        'new_leads_last': last_new_leads_count,
+        'new_leads_growth': round(new_leads_growth, 1)
     })
 
 @app.route('/api/dashboard/revenue-by-assignee')
