@@ -157,106 +157,83 @@
     </div>
 </div>
 
+<!-- Charts Section: Stage Funnel + Monthly Trend -->
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
-        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">案件ステージ別</h2>
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">ステージ別ファネル</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">商談ステージごとの案件数</p>
         <canvas id="dealStageChart"></canvas>
     </div>
     
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
-        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">業界別受注率ランキング</h2>
-        <div id="industryRankingEmpty" class="text-center py-8 text-gray-500 dark:text-gray-400">
-            データがありません
+        <div class="flex justify-between items-center mb-4">
+            <div>
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">期間別推移</h2>
+                <p class="text-sm text-gray-500 dark:text-gray-400">月別の売上・新規顧客・受注率トレンド</p>
+            </div>
+            <select id="dashboard-trend-months" class="px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                <option value="6">直近6ヶ月</option>
+                <option value="12">直近12ヶ月</option>
+            </select>
         </div>
-        <canvas id="industryRankingChart" class="hidden"></canvas>
+        <canvas id="dashboardTrendChart"></canvas>
     </div>
 </div>
 
-<!-- Industry Drill-down Analysis Section -->
+<!-- Winning Strategy Summary Section -->
 <div class="mb-8">
-    <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">業界別分析</h2>
+    <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">勝ち筋サマリー</h2>
+    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">効果的な集客チャネルと業界を特定</p>
     
-    <!-- Filter Controls -->
-    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700 mb-6">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-                <label for="industrySelect" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">業界</label>
-                <select id="industrySelect" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
-                    <option value="">すべて</option>
-                    <!-- Will be populated dynamically -->
-                </select>
-            </div>
-            
-            <div>
-                <label for="metricSelect" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">分析種別</label>
-                <select id="metricSelect" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
-                    <option value="avg_amount">平均単価</option>
-                    <option value="win_rate">受注率</option>
-                    <option value="win_reasons">受注理由</option>
-                    <option value="loss_reasons">失注理由</option>
-                </select>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Analysis Chart Display -->
-    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4" id="industryAnalysisTitle">分析結果</h3>
-        <div id="industryAnalysisEmpty" class="text-center py-8 text-gray-500 dark:text-gray-400">
-            業界と分析種別を選択してください
-        </div>
-        <div class="flex justify-center">
-            <div style="max-width: 400px; max-height: 400px; width: 100%;">
-                <canvas id="industryAnalysisChart" class="hidden"></canvas>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Conversion Insights Section (v2.6.0) -->
-<div class="mb-8">
-    <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">受注/失注分析</h2>
-    
-    <!-- Win Rate Summary Card -->
-    <div class="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl shadow-lg p-6 text-white mb-6">
-        <div class="grid grid-cols-3 gap-4">
-            <div>
-                <p class="text-green-100 text-sm font-medium">受注率</p>
-                <p class="text-3xl font-bold mt-2" id="analytics-win-rate">0%</p>
-            </div>
-            <div>
-                <p class="text-green-100 text-sm font-medium">受注</p>
-                <p class="text-2xl font-semibold mt-2" id="analytics-won-count">0件</p>
-            </div>
-            <div>
-                <p class="text-green-100 text-sm font-medium">失注</p>
-                <p class="text-2xl font-semibold mt-2" id="analytics-lost-count">0件</p>
-            </div>
-        </div>
-        <p class="text-green-100 text-sm mt-4">クローズ済み案件の成果</p>
-    </div>
-    
-    <!-- Win/Loss Reasons Charts -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Lead Source Top 3 -->
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">受注理由トップ5</h3>
-            <div id="winReasonEmpty" class="text-center py-8 text-gray-500 dark:text-gray-400">
-                データがありません
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-base font-semibold text-gray-900 dark:text-white">リードソース別 受注率・単価</h3>
+                <a href="/analytics" class="text-sm text-primary hover:text-indigo-700 dark:hover:text-indigo-400">すべて見る →</a>
             </div>
-            <canvas id="winReasonChart" class="hidden"></canvas>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-gray-50 dark:bg-gray-700">
+                        <tr>
+                            <th class="px-3 py-2 text-left font-medium text-gray-700 dark:text-gray-300">リードソース</th>
+                            <th class="px-3 py-2 text-right font-medium text-gray-700 dark:text-gray-300">受注率</th>
+                            <th class="px-3 py-2 text-right font-medium text-gray-700 dark:text-gray-300">平均単価</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lead-source-top3-tbody">
+                        <tr><td colspan="3" class="px-3 py-4 text-center text-gray-500">読み込み中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
         
+        <!-- Industry Top 3 -->
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">失注理由トップ5</h3>
-            <div id="lossReasonEmpty" class="text-center py-8 text-gray-500 dark:text-gray-400">
-                データがありません
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-base font-semibold text-gray-900 dark:text-white">業界別 受注率＆売上</h3>
+                <a href="/analytics" class="text-sm text-primary hover:text-indigo-700 dark:hover:text-indigo-400">すべて見る →</a>
             </div>
-            <canvas id="lossReasonChart" class="hidden"></canvas>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-gray-50 dark:bg-gray-700">
+                        <tr>
+                            <th class="px-3 py-2 text-left font-medium text-gray-700 dark:text-gray-300">業界</th>
+                            <th class="px-3 py-2 text-right font-medium text-gray-700 dark:text-gray-300">受注率</th>
+                            <th class="px-3 py-2 text-right font-medium text-gray-700 dark:text-gray-300">売上合計</th>
+                        </tr>
+                    </thead>
+                    <tbody id="industry-top3-tbody">
+                        <tr><td colspan="3" class="px-3 py-4 text-center text-gray-500">読み込み中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<!-- Recent Deals and Tasks -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
         <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">最近の案件</h2>
         <div class="space-y-3">
@@ -546,13 +523,18 @@
                 } else {
                     staleAlert.classList.add('hidden');
                 }
+                
+                // New leads count
+                if (data.new_leads !== undefined) {
+                    document.getElementById('new-leads-count').textContent = data.new_leads + '件';
+                }
             })
             .catch(error => {
                 console.error('Error loading KPIs:', error);
             });
         
-        // Load conversion analytics
-        loadConversionAnalytics(period, startDate, endDate);
+        // Load winning strategy summary
+        loadWinningStrategySummary(period, startDate, endDate);
     }
     
     // Load conversion analytics
@@ -674,6 +656,181 @@
             if (type === 'win') winReasonChartInstance = newChart;
             else lossReasonChartInstance = newChart;
         }
+    }
+    
+    // Load winning strategy summary (Top 3 tables)
+    function loadWinningStrategySummary(period, startDate = null, endDate = null) {
+        let urlParams = '?period=' + period;
+        if (period === 'custom' && startDate && endDate) {
+            urlParams += '&start_date=' + startDate + '&end_date=' + endDate;
+        }
+        
+        // Load lead source top 3
+        fetch('/api/analytics/lead-source' + urlParams)
+            .then(response => response.json())
+            .then(result => {
+                const data = result.data || [];
+                const tbody = document.getElementById('lead-source-top3-tbody');
+                
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" class="px-3 py-4 text-center text-gray-500 dark:text-gray-400">データがありません</td></tr>';
+                    return;
+                }
+                
+                // Sort by win rate and take top 3
+                const sorted = [...data].sort((a, b) => (b.win_rate || 0) - (a.win_rate || 0)).slice(0, 3);
+                
+                tbody.innerHTML = sorted.map(item => `
+                    <tr class="border-b border-gray-100 dark:border-gray-700">
+                        <td class="px-3 py-3 text-gray-900 dark:text-white">${item.lead_source || '未設定'}</td>
+                        <td class="px-3 py-3 text-right text-gray-600 dark:text-gray-300">${((item.win_rate || 0) * 100).toFixed(1)}%</td>
+                        <td class="px-3 py-3 text-right text-gray-600 dark:text-gray-300">${formatCurrency(item.avg_amount || 0)}</td>
+                    </tr>
+                `).join('');
+            })
+            .catch(error => {
+                console.error('Error loading lead source top 3:', error);
+                document.getElementById('lead-source-top3-tbody').innerHTML = '<tr><td colspan="3" class="px-3 py-4 text-center text-gray-500">読み込み失敗</td></tr>';
+            });
+        
+        // Load industry top 3
+        fetch('/api/analytics/industry' + urlParams)
+            .then(response => response.json())
+            .then(result => {
+                const data = result.data || [];
+                const tbody = document.getElementById('industry-top3-tbody');
+                
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" class="px-3 py-4 text-center text-gray-500 dark:text-gray-400">データがありません</td></tr>';
+                    return;
+                }
+                
+                // Sort by revenue and take top 3
+                const sorted = [...data].sort((a, b) => (b.revenue || 0) - (a.revenue || 0)).slice(0, 3);
+                
+                tbody.innerHTML = sorted.map(item => `
+                    <tr class="border-b border-gray-100 dark:border-gray-700">
+                        <td class="px-3 py-3 text-gray-900 dark:text-white">${item.industry || '未設定'}</td>
+                        <td class="px-3 py-3 text-right text-gray-600 dark:text-gray-300">${((item.win_rate || 0) * 100).toFixed(1)}%</td>
+                        <td class="px-3 py-3 text-right text-gray-600 dark:text-gray-300">${formatCurrency(item.revenue || 0)}</td>
+                    </tr>
+                `).join('');
+            })
+            .catch(error => {
+                console.error('Error loading industry top 3:', error);
+                document.getElementById('industry-top3-tbody').innerHTML = '<tr><td colspan="3" class="px-3 py-4 text-center text-gray-500">読み込み失敗</td></tr>';
+            });
+    }
+    
+    // Dashboard trend chart
+    let dashboardTrendChartInstance = null;
+    
+    function loadDashboardTrendChart(months = 6) {
+        fetch(`/api/analytics/monthly-trend?months=${months}`)
+            .then(response => response.json())
+            .then(result => {
+                const data = result.data || [];
+                const canvas = document.getElementById('dashboardTrendChart');
+                
+                if (!canvas) return;
+                
+                const isDark = document.documentElement.classList.contains('dark');
+                const textColor = isDark ? '#e5e7eb' : '#374151';
+                const gridColor = isDark ? '#374151' : '#e5e7eb';
+                
+                const labels = data.map(d => d.month);
+                const revenues = data.map(d => d.revenue || 0);
+                const winRates = data.map(d => (d.win_rate || 0) * 100);
+                
+                if (dashboardTrendChartInstance) {
+                    dashboardTrendChartInstance.destroy();
+                }
+                
+                dashboardTrendChartInstance = new Chart(canvas, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: '売上',
+                                data: revenues,
+                                borderColor: '#10b981',
+                                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                fill: true,
+                                yAxisID: 'y',
+                                tension: 0.3
+                            },
+                            {
+                                label: '受注率 (%)',
+                                data: winRates,
+                                borderColor: '#8b5cf6',
+                                backgroundColor: 'transparent',
+                                borderDash: [5, 5],
+                                yAxisID: 'y1',
+                                tension: 0.3
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false
+                        },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top',
+                                labels: { color: textColor }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                type: 'linear',
+                                display: true,
+                                position: 'left',
+                                beginAtZero: true,
+                                ticks: {
+                                    color: textColor,
+                                    callback: function(value) { return formatCurrency(value); }
+                                },
+                                grid: { color: gridColor }
+                            },
+                            y1: {
+                                type: 'linear',
+                                display: true,
+                                position: 'right',
+                                beginAtZero: true,
+                                max: 100,
+                                ticks: {
+                                    color: textColor,
+                                    callback: function(value) { return value + '%'; }
+                                },
+                                grid: { drawOnChartArea: false }
+                            },
+                            x: {
+                                ticks: { color: textColor },
+                                grid: { display: false }
+                            }
+                        }
+                    }
+                });
+            })
+            .catch(error => {
+                console.error('Error loading dashboard trend chart:', error);
+            });
+    }
+    
+    // Initialize dashboard trend chart
+    loadDashboardTrendChart(6);
+    
+    // Handle trend months change
+    const dashboardTrendMonthsSelect = document.getElementById('dashboard-trend-months');
+    if (dashboardTrendMonthsSelect) {
+        dashboardTrendMonthsSelect.addEventListener('change', function() {
+            loadDashboardTrendChart(parseInt(this.value));
+        });
     }
     
     // Initial load with current month

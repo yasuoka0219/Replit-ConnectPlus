@@ -3120,6 +3120,12 @@ def api_dashboard_kpis():
         'end_date': current_period_end
     }).scalar() or 0
     
+    # New leads (deals created in the period)
+    new_leads_count = Deal.query.filter(
+        Deal.created_at >= datetime.combine(current_period_start, datetime.min.time()),
+        Deal.created_at <= datetime.combine(current_period_end, datetime.max.time())
+    ).count()
+    
     return jsonify({
         'revenue': {
             'current_month': float(current_month_revenue) if current_month_revenue else 0,
@@ -3147,7 +3153,8 @@ def api_dashboard_kpis():
         },
         'activities': {
             'this_month': activities_count
-        }
+        },
+        'new_leads': new_leads_count
     })
 
 @app.route('/api/dashboard/revenue-by-assignee')
