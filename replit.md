@@ -3,7 +3,7 @@
 ## Overview
 CONNECT+ is a lightweight CRM system designed for sales teams, centralizing customer, deal, and task management. It aims to provide a simple, stylish, and intuitive management tool with a modern UI inspired by Notion and Linear. The project's ambition is to streamline sales operations through enhanced dashboards, comprehensive data management, and insightful analytics.
 
-**Latest Version:** v3.1.0 (Dashboard UI Optimization)
+**Latest Version:** v3.2.0 (Dashboard UI Restructure)
 
 ## User Preferences
 - デザイン: NotionやLinear風のモダンで直感的なUI
@@ -16,7 +16,12 @@ CONNECT+ is built as a full-stack Flask application using Python for the backend
 
 **Key Features:**
 
-*   **Extended Dashboard (v3.1.0 Optimized):** Real-time KPIs with month-over-month comparison (売上/パイプライン/成約率/新規リード + 前月比%). Low-saturation color scheme (emerald/sky/violet/orange). Compact summary section (企業数/連絡先/案件数/総額). Winning strategy summary with Top3 tables for lead source and industry. Stage funnel chart, monthly trend chart (6 months default), alerts for stagnant deals, and period selection.
+*   **Extended Dashboard (v3.2.0 Restructured):** Streamlined 4-row layout:
+    - Row 1: Main KPI cards (売上/パイプライン/成約率/新規リード) with month-over-month comparison badges, low-saturation color scheme (emerald/sky/violet/orange)
+    - Row 2: Compact summary section (企業数/連絡先/案件数/総額)
+    - Row 3: Two-column layout with monthly trend chart (left) and winning strategy summary with Top3 tables (right), link to cross-tabulation analytics
+    - Row 4: Compact recent deals/tasks (5 items each) with "View All" links
+    - Stagnant deal alerts, period selection (month/year/custom)
 *   **Customer Management:** CRUD operations for companies and contacts. Companies feature tag management, a detailed view with tabs for deals, contacts, and activity history.
 *   **Deal Management:** Lifecycle management including phase tracking, amount/progress updates, "heat score" (A/B/C/ネタ) for prioritization, appointment date tracking, stagnation detection, meeting minutes, and "NEXT ACTION" fields.
 *   **Activity History Management:** Tracks various activity types (calls, meetings, emails, notes) displayed in a timeline, automatically updates last contact dates, and links activities to specific deals.
