@@ -5079,66 +5079,54 @@ def api_analytics_stage_funnel():
 @login_required
 def api_analytics_lost_reason():
     """Cross-tabulation: Lost Reason × Industry / Assignee"""
-    from models import LostReason
-    
     start_date, end_date = get_cross_tab_date_range()
     mode = request.args.get('mode', 'industry')  # 'industry' or 'assignee'
     
-    # Get lost deals
-    lost_deals = Deal.query.filter(
-        Deal.status == 'LOST',
-        Deal.lost_date >= start_date,
-        Deal.lost_date <= end_date
-    ).all()
+    # Get lost deals - use closed_at or lost_date for filtering
+    lost_deals_query = Deal.query.filter(Deal.status == 'LOST')
+    
+    # Filter by date range using closed_at or lost_date
+    lost_deals_query = lost_deals_query.filter(
+        db.or_(
+            db.and_(Deal.closed_at.isnot(None), Deal.closed_at >= datetime.combine(start_date, datetime.min.time()), Deal.closed_at <= datetime.combine(end_date, datetime.max.time())),
+            db.and_(Deal.lost_date.isnot(None), Deal.lost_date >= start_date, Deal.lost_date <= end_date),
+            db.and_(Deal.closed_at.is_(None), Deal.lost_date.is_(None))  # Include deals without dates
+        )
+    )
+    
+    lost_deals = lost_deals_query.all()
     
     if mode == 'industry':
-        # Group by lost_reason_category
-        reason_data = {}
+        # Group by lost_reason_category - simple count by reason
+        reason_counts = {}
         for d in lost_deals:
             reason = d.lost_reason_category or '未設定'
-            if reason not in reason_data:
-                reason_data[reason] = {'deals': [], 'industries': {}}
-            reason_data[reason]['deals'].append(d)
-            
-            # Get industry
-            if d.company:
-                ind = d.company.industry or '未設定'
-                reason_data[reason]['industries'][ind] = reason_data[reason]['industries'].get(ind, 0) + 1
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
         
-        results = []
-        for reason, data in reason_data.items():
-            # Get top 3 industries
-            sorted_industries = sorted(data['industries'].items(), key=lambda x: x[1], reverse=True)[:3]
-            top_industries = [{'name': k, 'count': v} for k, v in sorted_industries]
-            
-            results.append({
-                'lost_reason': reason,
-                'deal_count': len(data['deals']),
-                'total_amount': sum(d.amount or 0 for d in data['deals']),
-                'top_industries': top_industries
-            })
-        
-        results.sort(key=lambda x: x['deal_count'], reverse=True)
+        # Format for JavaScript: expects 'reason' and 'count'
+        results = [{'reason': reason, 'count': count} for reason, count in reason_counts.items()]
+        results.sort(key=lambda x: x['count'], reverse=True)
         
     else:  # mode == 'assignee'
-        # Group by assignee
-        assignee_data = {}
+        # Group by assignee, then by reason
+        assignee_reason_counts = {}
         for d in lost_deals:
             assignee_name = d.get_assignee_name() or '未割当'
-            if assignee_name not in assignee_data:
-                assignee_data[assignee_name] = {}
-            
             reason = d.lost_reason_category or '未設定'
-            assignee_data[assignee_name][reason] = assignee_data[assignee_name].get(reason, 0) + 1
+            
+            if assignee_name not in assignee_reason_counts:
+                assignee_reason_counts[assignee_name] = {}
+            assignee_reason_counts[assignee_name][reason] = assignee_reason_counts[assignee_name].get(reason, 0) + 1
         
-        results = []
-        for assignee, reasons in assignee_data.items():
-            row = {'assignee': assignee}
-            row['reasons'] = reasons
-            row['total'] = sum(reasons.values())
-            results.append(row)
+        # Flatten to reason counts across all assignees
+        reason_counts = {}
+        for assignee, reasons in assignee_reason_counts.items():
+            for reason, count in reasons.items():
+                reason_counts[reason] = reason_counts.get(reason, 0) + count
         
-        results.sort(key=lambda x: x['total'], reverse=True)
+        # Format for JavaScript: expects 'reason' and 'count'
+        results = [{'reason': reason, 'count': count} for reason, count in reason_counts.items()]
+        results.sort(key=lambda x: x['count'], reverse=True)
     
     return jsonify({'data': results, 'mode': mode, 'period': {'start': str(start_date), 'end': str(end_date)}})
 
