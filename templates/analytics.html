@@ -193,20 +193,19 @@
 
 <!-- Section 6: Lost Reason Analysis -->
 <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700 mb-6">
-    <div class="flex justify-between items-center mb-4">
-        <div>
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">失注理由分析</h2>
-            <p class="text-sm text-gray-500 dark:text-gray-400">失注理由の傾向を業界別・担当者別に分析</p>
-        </div>
-        <div class="flex gap-2">
-            <button id="lost-reason-by-industry" class="px-3 py-2 text-sm font-medium rounded-lg bg-primary text-white">業界別</button>
-            <button id="lost-reason-by-assignee" class="px-3 py-2 text-sm font-medium rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500">担当者別</button>
+    <div class="mb-4">
+        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
+            <div>
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">失注理由分析</h2>
+                <p class="text-sm text-gray-500 dark:text-gray-400">失注理由の傾向を業界別・担当者別に分析</p>
+            </div>
+            <div class="flex gap-2">
+                <button id="lost-reason-by-industry" class="px-3 py-2 text-sm font-medium rounded-lg bg-primary text-white">業界別</button>
+                <button id="lost-reason-by-assignee" class="px-3 py-2 text-sm font-medium rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500">担当者別</button>
+            </div>
         </div>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div style="height: 300px;">
-            <canvas id="lostReasonChart"></canvas>
-        </div>
         <div class="overflow-x-auto">
             <table class="w-full text-sm">
                 <thead class="bg-gray-50 dark:bg-gray-700">
@@ -220,6 +219,9 @@
                     <tr><td colspan="3" class="px-4 py-4 text-center text-gray-500">読み込み中...</td></tr>
                 </tbody>
             </table>
+        </div>
+        <div style="height: 300px;">
+            <canvas id="lostReasonChart"></canvas>
         </div>
     </div>
 </div>
