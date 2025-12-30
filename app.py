@@ -136,7 +136,8 @@ TEAM_SCOPE_OPTIONS = ('all', 'team', 'personal')
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SESSION_SECRET', 'dev-secret-key-change-this')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+# DATABASE_URLが設定されていない場合はSQLiteを使用
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL') or 'sqlite:///connectplus.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['WTF_CSRF_ENABLED'] = True
 
@@ -5266,6 +5267,7 @@ if __name__ == '__main__':
     
     # Replit環境対応：ホストは0.0.0.0、ポート5000を使用
     # 本番環境では環境変数PORTを使用し、debug=Falseに設定
-    port = 5000
-    debug = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
+    port = int(os.environ.get('PORT', 5001))  # デフォルトを5001に変更（5000が使用中の場合）
+    # 本番環境ではデフォルトでFalse、開発時は環境変数FLASK_DEBUG=Trueで有効化
+    debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
     app.run(host='0.0.0.0', port=port, debug=debug)
