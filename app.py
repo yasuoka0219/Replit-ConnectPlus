@@ -175,6 +175,96 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.session_protection = 'basic'  # セッション保護を基本レベルに
 
+# アプリケーション初期化時にデータベースマイグレーションを実行
+def init_db():
+    """データベースの初期化とマイグレーション"""
+    with app.app_context():
+        try:
+            # 既存のテーブルがあるか確認
+            db.session.execute(db.text('SELECT 1'))
+            print("✓ Database connection established")
+            # 既存データベースの場合はマイグレーションを実行
+            database_url = os.environ.get('DATABASE_URL', '')
+            if database_url and 'postgresql' in database_url:
+                print("Running PostgreSQL migration...")
+                # PostgreSQL用のマイグレーション
+                migrations = [
+                    """
+                    DO $$ BEGIN
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS employee_size INTEGER;
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS hq_location VARCHAR(200);
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS website VARCHAR(300);
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS needs TEXT;
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS kpi_current TEXT;
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS heat_score INTEGER DEFAULT 1;
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS last_contacted_at TIMESTAMP;
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS next_action_at TIMESTAMP;
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS tags VARCHAR(500);
+                    END $$;
+                    """,
+                    """
+                    DO $$ BEGIN
+                        ALTER TABLE contacts ADD COLUMN IF NOT EXISTS role VARCHAR(100);
+                        ALTER TABLE contacts ADD COLUMN IF NOT EXISTS notes TEXT;
+                    END $$;
+                    """,
+                    """
+                    DO $$ BEGIN
+                        ALTER TABLE deals ADD COLUMN IF NOT EXISTS win_reason TEXT;
+                        ALTER TABLE deals ADD COLUMN IF NOT EXISTS lost_reason TEXT;
+                        ALTER TABLE deals ADD COLUMN IF NOT EXISTS stage_entered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+                        ALTER TABLE deals ADD COLUMN IF NOT EXISTS assignee VARCHAR(100);
+                    END $$;
+                    """,
+                    """
+                    CREATE TABLE IF NOT EXISTS activities (
+                        id SERIAL PRIMARY KEY,
+                        company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        deal_id INTEGER REFERENCES deals(id) ON DELETE CASCADE,
+                        type VARCHAR(20) NOT NULL CHECK (type IN ('call', 'meeting', 'email', 'note')),
+                        title VARCHAR(200) NOT NULL,
+                        body TEXT,
+                        happened_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    );
+                    """,
+                    """
+                    CREATE INDEX IF NOT EXISTS ix_companies_name ON companies(name);
+                    CREATE INDEX IF NOT EXISTS ix_companies_industry ON companies(industry);
+                    CREATE INDEX IF NOT EXISTS ix_companies_heat_score ON companies(heat_score);
+                    CREATE INDEX IF NOT EXISTS ix_deals_stage ON deals(stage);
+                    CREATE INDEX IF NOT EXISTS ix_deals_status ON deals(status);
+                    CREATE INDEX IF NOT EXISTS ix_deals_assignee ON deals(assignee);
+                    CREATE INDEX IF NOT EXISTS ix_deals_closed_at ON deals(closed_at);
+                    CREATE INDEX IF NOT EXISTS ix_deals_win_reason_category ON deals(win_reason_category);
+                    CREATE INDEX IF NOT EXISTS ix_deals_lost_reason_category ON deals(lost_reason_category);
+                    CREATE INDEX IF NOT EXISTS ix_activities_company_id ON activities(company_id);
+                    CREATE INDEX IF NOT EXISTS ix_activities_happened_at ON activities(happened_at);
+                    CREATE INDEX IF NOT EXISTS ix_activities_company_happened ON activities(company_id, happened_at);
+                    """
+                ]
+                for i, migration in enumerate(migrations, 1):
+                    try:
+                        db.session.execute(db.text(migration))
+                        db.session.commit()
+                        print(f"✓ Migration {i} completed")
+                    except Exception as e:
+                        print(f"Note: Migration {i} - {e}")
+                        db.session.rollback()
+            else:
+                print("Running SQLite migration...")
+                db.create_all()
+                print("✓ Tables created/updated")
+        except Exception as e:
+            # データベースが存在しない場合は新規作成
+            print(f"Creating new database schema...")
+            db.create_all()
+            print("✓ Database schema created")
+
+# アプリケーション起動時にマイグレーションを実行
+init_db()
+
 
 def has_role(user, *roles):
     return user.is_authenticated and user.role in roles
