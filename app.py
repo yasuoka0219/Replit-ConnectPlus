@@ -180,9 +180,15 @@ def init_db():
     """データベースの初期化とマイグレーション"""
     with app.app_context():
         try:
-            # 既存のテーブルがあるか確認
+            # データベース接続を確認
             db.session.execute(db.text('SELECT 1'))
             print("✓ Database connection established")
+            
+            # まず基本テーブルを作成
+            print("Creating base tables...")
+            db.create_all()
+            print("✓ Base tables created")
+            
             # 既存データベースの場合はマイグレーションを実行
             database_url = os.environ.get('DATABASE_URL', '')
             if database_url and 'postgresql' in database_url:
