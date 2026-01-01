@@ -47,7 +47,10 @@ def send_2fa_email(user_email, code):
         smtp_server = os.environ.get('SMTP_SERVER', 'smtp.gmail.com')
         smtp_port = int(os.environ.get('SMTP_PORT', '587'))
         smtp_username = os.environ.get('SMTP_USERNAME', '')
-        smtp_password = os.environ.get('SMTP_PASSWORD', '')
+        smtp_password = os.environ.get('SMTP_PASSWORD', '').strip()
+        # Remove spaces from app password if present (Gmail app passwords often have spaces)
+        if smtp_password:
+            smtp_password = smtp_password.replace(' ', '')
         smtp_from_email = os.environ.get('SMTP_FROM_EMAIL', smtp_username)
         smtp_from_name = os.environ.get('SMTP_FROM_NAME', 'CONNECT+ CRM')
         
@@ -111,13 +114,27 @@ CONNECT+ CRM - 2段階認証
         msg.attach(part2)
         
         # Send email
-        with smtplib.SMTP(smtp_server, smtp_port) as server:
-            server.starttls()
-            server.login(smtp_username, smtp_password)
-            server.send_message(msg)
-        
-        print(f"[2FA Email] Code sent to {user_email}")
-        return True
+        try:
+            with smtplib.SMTP(smtp_server, smtp_port, timeout=30) as server:
+                server.set_debuglevel(0)  # Set to 1 for debug output
+                server.starttls()
+                server.login(smtp_username, smtp_password)
+                server.send_message(msg)
+            
+            print(f"[2FA Email] ✓ Code sent to {user_email}")
+            return True
+        except smtplib.SMTPAuthenticationError as e:
+            print(f"[2FA Email] ❌ SMTP認証エラー: {e}")
+            print(f"[2FA Email] ユーザー名: {smtp_username}")
+            print(f"[2FA Email] パスワード長: {len(smtp_password)}文字")
+            print(f"[2FA Email] アプリパスワードが正しいか、2段階認証が有効か確認してください")
+            raise
+        except smtplib.SMTPException as e:
+            print(f"[2FA Email] ❌ SMTPエラー: {e}")
+            raise
+        except Exception as e:
+            print(f"[2FA Email] ❌ 予期しないエラー: {e}")
+            raise
         
     except Exception as e:
         import traceback
