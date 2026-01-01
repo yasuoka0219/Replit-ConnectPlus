@@ -36,6 +36,36 @@
                 <input type="text" id="location" name="location" value="{{ company.location if company else '' }}" 
                        class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
             </div>
+
+            <div class="mb-6">
+                <label for="area" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">エリア</label>
+                <input type="text" id="area" name="area" value="{{ company.area if company else '' }}" placeholder="例：東京都渋谷区"
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+            </div>
+
+            <div class="grid grid-cols-2 gap-6 mb-6">
+                <div>
+                    <label for="company_size_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">企業規模</label>
+                    <select id="company_size_id" name="company_size_id" 
+                            class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">未設定</option>
+                        {% for size in company_sizes %}
+                        <option value="{{ size.id }}" {% if company and company.company_size_id == size.id %}selected{% endif %}>{{ size.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label for="customer_status_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">顧客ステータス</label>
+                    <select id="customer_status_id" name="customer_status_id" 
+                            class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <option value="">未設定</option>
+                        {% for status in customer_statuses %}
+                        <option value="{{ status.id }}" {% if company and company.customer_status_id == status.id %}selected{% endif %}>{{ status.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
             
             <div class="mb-6">
                 <label for="memo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">メモ</label>

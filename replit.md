@@ -3,23 +3,40 @@
 ## Overview
 CONNECT+ is a lightweight CRM system designed for sales teams, centralizing customer, deal, and task management. It aims to provide a simple, stylish, and intuitive management tool with a modern UI inspired by Notion and Linear. The project's ambition is to streamline sales operations through enhanced dashboards, comprehensive data management, and insightful analytics.
 
+**Latest Version:** v3.2.0 (Dashboard UI Restructure)
+
 ## User Preferences
 - デザイン: NotionやLinear風のモダンで直感的なUI
 - レスポンシブ対応（PC・タブレット）
 - 日本語インターフェース
+- データの安全性：既存機能の破壊的変更を避け、スキーマ拡張のみで機能追加
 
 ## System Architecture
 CONNECT+ is built as a full-stack Flask application using Python for the backend and PostgreSQL for the database. Frontend utilizes Flask templating with TailwindCSS for styling, ensuring a modern and intuitive user experience. Chart.js is integrated for data visualization on the dashboard.
 
 **Key Features:**
 
-*   **Extended Dashboard:** Real-time KPIs (monthly sales, pipeline value, win rate), growth analysis, alerts for stagnant deals, and period selection (monthly, yearly, custom) for KPI analysis. Includes visualizations for deal stages and statuses, along with recent deals and tasks.
+*   **Extended Dashboard (v3.2.0 Restructured):** Streamlined 4-row layout:
+    - Row 1: Main KPI cards (売上/パイプライン/成約率/新規リード) with month-over-month comparison badges, low-saturation color scheme (emerald/sky/violet/orange)
+    - Row 2: Compact summary section (企業数/連絡先/案件数/総額)
+    - Row 3: Two-column layout with monthly trend chart (left) and winning strategy summary with Top3 tables (right), link to cross-tabulation analytics
+    - Row 4: Compact recent deals/tasks (5 items each) with "View All" links
+    - Stagnant deal alerts, period selection (month/year/custom)
 *   **Customer Management:** CRUD operations for companies and contacts. Companies feature tag management, a detailed view with tabs for deals, contacts, and activity history.
 *   **Deal Management:** Lifecycle management including phase tracking, amount/progress updates, "heat score" (A/B/C/ネタ) for prioritization, appointment date tracking, stagnation detection, meeting minutes, and "NEXT ACTION" fields.
 *   **Activity History Management:** Tracks various activity types (calls, meetings, emails, notes) displayed in a timeline, automatically updates last contact dates, and links activities to specific deals.
 *   **Task Management:** Manages ToDo items linked to deals, with due dates and assignees, filterable by status.
 *   **Quotation & Invoice Management:** Features for creating, editing, and issuing quotations and invoices with dynamic item lists, tax calculation, auto-numbering (YYYY-####), and PDF generation using `fpdf2` with Japanese font support. Includes an organization profile setup for company details on documents.
 *   **Conversion Analytics:** Dashboard section for win/loss analysis, displaying win rates, and top 5 win/loss reasons visualized with horizontal bar charts, integrated with period selection.
+*   **Cross-Tabulation Analytics (v3.0.0):** Advanced analytics dashboard featuring:
+    - KPI Summary cards (revenue, new wins, win rate, new leads)
+    - Lead Source × Results analysis (appointment rate, win rate, avg amount)
+    - Industry × Win Rate / Revenue cross-tabulation
+    - Assignee × Activity × Win Rate analysis
+    - Stage Funnel visualization with transition rates
+    - Monthly Trend charts (revenue, new customers, win rate over time)
+    - Lost Reason analysis with mode toggle (by industry/by assignee)
+    - All charts connected to period filter for dynamic analysis
 *   **User/Account Settings:** Basic login information display and theme switching (dark/light mode).
 
 **UI/UX Decisions:**
