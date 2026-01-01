@@ -2502,7 +2502,9 @@ def get_team_deals(team_id):
 @login_required
 def settings():
     org_profile = OrgProfile.query.first()
-    return render_template('settings.html', org_profile=org_profile)
+    # 2段階認証の設定画面へのアクセスを環境変数で制御（デフォルトは非表示）
+    enable_2fa_setup = os.environ.get('ENABLE_2FA_SETUP', 'false').lower() == 'true'
+    return render_template('settings.html', org_profile=org_profile, enable_2fa_setup=enable_2fa_setup)
 
 
 # 2FA (Two-Factor Authentication) Routes
