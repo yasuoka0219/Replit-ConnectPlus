@@ -57,9 +57,12 @@ def send_2fa_email(user_email, code):
         # If no SMTP credentials configured, use a mock/test mode
         if not smtp_username or not smtp_password:
             print(f"[2FA Email] ⚠️ SMTP設定がありません。開発モードで動作しています。")
+            print(f"[2FA Email] =========================================")
             print(f"[2FA Email] 認証コード: {code}")
             print(f"[2FA Email] メールアドレス: {user_email}")
-            print(f"[2FA Email] .envファイルにSMTP設定を追加してください。")
+            print(f"[2FA Email] =========================================")
+            print(f"[2FA Email] このコードを使用して2段階認証を設定してください。")
+            print(f"[2FA Email] SendGridなどのメール送信サービスを設定することを推奨します。")
             # 開発モードでもTrueを返す（エラーを防ぐため）
             return True  # Return True in development/test mode
         
@@ -169,11 +172,20 @@ CONNECT+ CRM - 2段階認証
             return True
         
         # SMTP設定があるがエラーが発生した場合
+        print(f"[2FA Email] =========================================")
+        print(f"[2FA Email] ⚠️ メール送信に失敗しました")
+        print(f"[2FA Email] =========================================")
+        print(f"[2FA Email] 認証コード: {code}")
+        print(f"[2FA Email] メールアドレス: {user_email}")
+        print(f"[2FA Email] =========================================")
+        print(f"[2FA Email] このコードを使用して2段階認証を設定してください。")
         print(f"[2FA Email] SMTP設定を確認してください:")
         print(f"  - SMTP_SERVER: {smtp_server}")
         print(f"  - SMTP_PORT: {smtp_port}")
         print(f"  - SMTP_USERNAME: {smtp_username[:3]}***")
-        print(f"[2FA Email] 認証コード（開発用）: {code}")
+        print(f"[2FA Email] SendGridなどのメール送信サービスを使用することを推奨します。")
+        import sys
+        sys.stdout.flush()  # ログが即座に出力されるように
         return False
 
 
