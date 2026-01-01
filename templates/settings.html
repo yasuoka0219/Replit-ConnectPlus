@@ -109,6 +109,9 @@
         <h2 class="text-xl font-semibold text-gray-900 dark:text-white mb-6">セキュリティ設定</h2>
         
         <div class="space-y-4">
+            {# 2段階認証機能は一時的に非表示。コードは保持し、後で有効化可能 #}
+            {# 環境変数ENABLE_2FA_SETUP=trueに設定すると表示されます #}
+            {% if enable_2fa_setup %}
             <div class="flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700">
                 <div>
                     <p class="font-medium text-gray-900 dark:text-white">2段階認証</p>
@@ -118,6 +121,7 @@
                     設定
                 </a>
             </div>
+            {% endif %}
             
             {% if has_role(current_user, 'admin') %}
             <div class="flex items-center justify-between py-3">
