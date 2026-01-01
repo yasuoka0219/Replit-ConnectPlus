@@ -90,9 +90,16 @@ class Company(db.Model):
     next_action_at = db.Column(db.DateTime, nullable=True)
     tags = db.Column(db.String(500), nullable=True)  # Comma-separated for now, can migrate to JSON later
     
+    # Analysis & Classification fields (v3.0.0)
+    company_size_id = db.Column(db.Integer, db.ForeignKey('company_sizes.id'), nullable=True, index=True)  # 企業規模
+    area = db.Column(db.String(200), nullable=True, index=True)  # エリア（都道府県など）
+    customer_status_id = db.Column(db.Integer, db.ForeignKey('customer_statuses.id'), nullable=True, index=True)  # 顧客ステータス（新規/既存/休眠）
+    
     contacts = db.relationship('Contact', backref='company', lazy=True, cascade='all, delete-orphan')
     deals = db.relationship('Deal', backref='company', lazy=True, cascade='all, delete-orphan')
     activities = db.relationship('Activity', backref='company', lazy=True, cascade='all, delete-orphan')
+    company_size = db.relationship('CompanySize', backref='companies')
+    customer_status = db.relationship('CustomerStatus', backref='companies')
     
     def __repr__(self):
         return f'<Company {self.name}>'
@@ -153,10 +160,23 @@ class Deal(db.Model):
     lost_reason_category = db.Column(db.String(100), nullable=True, index=True)
     lost_reason_detail = db.Column(db.Text, nullable=True)
     closed_at = db.Column(db.DateTime, nullable=True, index=True)
+    revenue_month = db.Column(db.String(7), nullable=True, index=True)  # 'YYYY-MM' format
+    
+    # Analysis fields (v3.0.0)
+    lead_source_id = db.Column(db.Integer, db.ForeignKey('lead_sources.id'), nullable=True, index=True)  # リードソース
+    new_or_existing = db.Column(db.String(20), nullable=True, index=True)  # '新規' or '既存'
+    gross_profit = db.Column(db.Float, nullable=True)  # 粗利
+    won_date = db.Column(db.Date, nullable=True, index=True)  # 受注日
+    lost_date = db.Column(db.Date, nullable=True, index=True)  # 失注日
+    probability_rank = db.Column(db.String(10), nullable=True, index=True)  # 見込ランク（A/B/C）
+    competitor_name = db.Column(db.String(200), nullable=True)  # 競合名
+    first_contact_date = db.Column(db.Date, nullable=True, index=True)  # 初回接触日
+    proposal_date = db.Column(db.Date, nullable=True, index=True)  # 提案日
     
     # Relationships
     assignee_user = db.relationship('User', foreign_keys=[assignee_id], backref='assigned_deals')
     team = db.relationship('Team', back_populates='deals')
+    lead_source = db.relationship('LeadSource', backref='deals')
     tasks = db.relationship('Task', backref='deal', lazy=True, cascade='all, delete-orphan')
     activities = db.relationship('Activity', backref='deal', lazy=True, cascade='all, delete-orphan')
     
@@ -170,12 +190,6 @@ class Deal(db.Model):
             return (datetime.utcnow() - self.stage_entered_at).days
         return 0
     
-    @property
-    def revenue_month(self):
-        """Get revenue month (year-month) from closed_at date"""
-        if self.status == 'WON' and self.closed_at:
-            return self.closed_at.strftime('%Y-%m')
-        return None
     
     def get_assignee_name(self):
         """Get assignee name (from User if assignee_id exists, else from assignee string)"""
@@ -221,6 +235,11 @@ class Activity(db.Model):
     
     # Google Calendar integration
     google_calendar_event_id = db.Column(db.String(255), nullable=True, index=True)
+    
+    # Activity analysis fields (v3.0.0)
+    count = db.Column(db.Integer, default=1, nullable=False)  # 件数
+    duration_minutes = db.Column(db.Integer, nullable=True)  # 所要時間（分）
+    memo = db.Column(db.Text, nullable=True)  # メモ（body とは別）
     
     # Relationships
     user = db.relationship('User', backref='activities', lazy=True)
@@ -516,3 +535,105 @@ class GoogleCalendarConnection(db.Model):
             return True
         # Add 5 minute buffer for expiry check
         return datetime.utcnow() + timedelta(minutes=5) >= self.token_expiry
+
+
+# ============================================================================
+# Master Tables for Analysis & Classification (v3.0.0)
+# ============================================================================
+
+class Industry(db.Model):
+    """Industry/Sector master"""
+    __tablename__ = 'industries'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    description = db.Column(db.String(300), nullable=True)
+    sort_order = db.Column(db.Integer, default=0, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<Industry {self.name}>'
+
+
+class CompanySize(db.Model):
+    """Company size range master"""
+    __tablename__ = 'company_sizes'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    description = db.Column(db.String(300), nullable=True)
+    sort_order = db.Column(db.Integer, default=0, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<CompanySize {self.name}>'
+
+
+class CustomerStatus(db.Model):
+    """Customer status master (新規/既存/休眠)"""
+    __tablename__ = 'customer_statuses'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    description = db.Column(db.String(300), nullable=True)
+    sort_order = db.Column(db.Integer, default=0, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<CustomerStatus {self.name}>'
+
+
+class LeadSource(db.Model):
+    """Lead source master (紹介/Web/広告/展示会/テレアポ/代理店など)"""
+    __tablename__ = 'lead_sources'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    description = db.Column(db.String(300), nullable=True)
+    sort_order = db.Column(db.Integer, default=0, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<LeadSource {self.name}>'
+
+
+class Stage(db.Model):
+    """Deal stage master"""
+    __tablename__ = 'stages'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    description = db.Column(db.String(300), nullable=True)
+    sort_order = db.Column(db.Integer, default=0, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<Stage {self.name}>'
+
+
+class LostReason(db.Model):
+    """Lost reason master"""
+    __tablename__ = 'lost_reasons'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    description = db.Column(db.String(300), nullable=True)
+    sort_order = db.Column(db.Integer, default=0, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<LostReason {self.name}>'
+
+
+class ActivityType(db.Model):
+    """Activity type master (電話/メール/オンライン商談/訪問/提案書作成など)"""
+    __tablename__ = 'activity_types'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    description = db.Column(db.String(300), nullable=True)
+    sort_order = db.Column(db.Integer, default=0, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<ActivityType {self.name}>'

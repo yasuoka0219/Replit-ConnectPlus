@@ -136,7 +136,8 @@ TEAM_SCOPE_OPTIONS = ('all', 'team', 'personal')
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SESSION_SECRET', 'dev-secret-key-change-this')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+# DATABASE_URLが設定されていない場合はSQLiteを使用
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL') or 'sqlite:///connectplus.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['WTF_CSRF_ENABLED'] = True
 
@@ -173,6 +174,102 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.session_protection = 'basic'  # セッション保護を基本レベルに
+
+# アプリケーション初期化時にデータベースマイグレーションを実行
+def init_db():
+    """データベースの初期化とマイグレーション"""
+    with app.app_context():
+        try:
+            # データベース接続を確認
+            db.session.execute(db.text('SELECT 1'))
+            print("✓ Database connection established")
+            
+            # まず基本テーブルを作成
+            print("Creating base tables...")
+            db.create_all()
+            print("✓ Base tables created")
+            
+            # 既存データベースの場合はマイグレーションを実行
+            database_url = os.environ.get('DATABASE_URL', '')
+            if database_url and 'postgresql' in database_url:
+                print("Running PostgreSQL migration...")
+                # PostgreSQL用のマイグレーション
+                migrations = [
+                    """
+                    DO $$ BEGIN
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS employee_size INTEGER;
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS hq_location VARCHAR(200);
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS website VARCHAR(300);
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS needs TEXT;
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS kpi_current TEXT;
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS heat_score INTEGER DEFAULT 1;
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS last_contacted_at TIMESTAMP;
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS next_action_at TIMESTAMP;
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS tags VARCHAR(500);
+                    END $$;
+                    """,
+                    """
+                    DO $$ BEGIN
+                        ALTER TABLE contacts ADD COLUMN IF NOT EXISTS role VARCHAR(100);
+                        ALTER TABLE contacts ADD COLUMN IF NOT EXISTS notes TEXT;
+                    END $$;
+                    """,
+                    """
+                    DO $$ BEGIN
+                        ALTER TABLE deals ADD COLUMN IF NOT EXISTS win_reason TEXT;
+                        ALTER TABLE deals ADD COLUMN IF NOT EXISTS lost_reason TEXT;
+                        ALTER TABLE deals ADD COLUMN IF NOT EXISTS stage_entered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+                        ALTER TABLE deals ADD COLUMN IF NOT EXISTS assignee VARCHAR(100);
+                    END $$;
+                    """,
+                    """
+                    CREATE TABLE IF NOT EXISTS activities (
+                        id SERIAL PRIMARY KEY,
+                        company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        deal_id INTEGER REFERENCES deals(id) ON DELETE CASCADE,
+                        type VARCHAR(20) NOT NULL CHECK (type IN ('call', 'meeting', 'email', 'note')),
+                        title VARCHAR(200) NOT NULL,
+                        body TEXT,
+                        happened_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    );
+                    """,
+                    """
+                    CREATE INDEX IF NOT EXISTS ix_companies_name ON companies(name);
+                    CREATE INDEX IF NOT EXISTS ix_companies_industry ON companies(industry);
+                    CREATE INDEX IF NOT EXISTS ix_companies_heat_score ON companies(heat_score);
+                    CREATE INDEX IF NOT EXISTS ix_deals_stage ON deals(stage);
+                    CREATE INDEX IF NOT EXISTS ix_deals_status ON deals(status);
+                    CREATE INDEX IF NOT EXISTS ix_deals_assignee ON deals(assignee);
+                    CREATE INDEX IF NOT EXISTS ix_deals_closed_at ON deals(closed_at);
+                    CREATE INDEX IF NOT EXISTS ix_deals_win_reason_category ON deals(win_reason_category);
+                    CREATE INDEX IF NOT EXISTS ix_deals_lost_reason_category ON deals(lost_reason_category);
+                    CREATE INDEX IF NOT EXISTS ix_activities_company_id ON activities(company_id);
+                    CREATE INDEX IF NOT EXISTS ix_activities_happened_at ON activities(happened_at);
+                    CREATE INDEX IF NOT EXISTS ix_activities_company_happened ON activities(company_id, happened_at);
+                    """
+                ]
+                for i, migration in enumerate(migrations, 1):
+                    try:
+                        db.session.execute(db.text(migration))
+                        db.session.commit()
+                        print(f"✓ Migration {i} completed")
+                    except Exception as e:
+                        print(f"Note: Migration {i} - {e}")
+                        db.session.rollback()
+            else:
+                print("Running SQLite migration...")
+                db.create_all()
+                print("✓ Tables created/updated")
+        except Exception as e:
+            # データベースが存在しない場合は新規作成
+            print(f"Creating new database schema...")
+            db.create_all()
+            print("✓ Database schema created")
+
+# アプリケーション起動時にマイグレーションを実行
+init_db()
 
 
 def has_role(user, *roles):
@@ -258,7 +355,8 @@ def get_available_scopes(user):
 
 def resolve_view_scope(user, requested_scope):
     scopes = get_available_scopes(user)
-    default_scope = 'team' if user.team_id else 'personal'
+    # Default to 'team' scope for deals page (show all team deals), fallback to 'all'
+    default_scope = 'team' if user.team_id else 'all'
     if requested_scope in scopes:
         return requested_scope
     return default_scope
@@ -268,7 +366,12 @@ def apply_scope_to_query(query, user, view_scope):
     if view_scope == 'personal':
         return query.filter(Deal.assignee_id == user.id)
     if view_scope == 'team' and user.team_id:
-        return query.filter(Deal.team_id == user.team_id)
+        return query.filter(
+            db.or_(
+                Deal.team_id == user.team_id,
+                Deal.team_id.is_(None)
+            )
+        )
     return query
 
 @login_manager.unauthorized_handler
@@ -738,6 +841,12 @@ def dashboard():
                          recent_tasks=recent_tasks,
                          industries=INDUSTRY_CATEGORIES)
 
+@app.route('/analytics')
+@login_required
+def analytics():
+    """Cross-tabulation analytics page"""
+    return render_template('analytics.html')
+
 @app.route('/companies')
 @login_required
 def companies():
@@ -1133,17 +1242,28 @@ def import_companies():
 @app.route('/companies/create', methods=['GET', 'POST'])
 @login_required
 def create_company():
+    from models import CompanySize, CustomerStatus
     if request.method == 'POST':
         # Validate industry selection
         industry = request.form.get('industry')
         if industry and industry not in INDUSTRY_CATEGORIES:
             flash('無効な業界が選択されています。', 'error')
-            return render_template('company_form.html', company=None, industries=INDUSTRY_CATEGORIES)
+            company_sizes = CompanySize.query.order_by(CompanySize.sort_order).all()
+            customer_statuses = CustomerStatus.query.order_by(CustomerStatus.sort_order).all()
+            return render_template('company_form.html', company=None, industries=INDUSTRY_CATEGORIES, 
+                                 company_sizes=company_sizes, customer_statuses=customer_statuses)
+        
+        # Handle company_size_id and customer_status_id
+        company_size_id = request.form.get('company_size_id')
+        customer_status_id = request.form.get('customer_status_id')
         
         company = Company(
             name=request.form.get('name'),
             industry=industry if industry else None,
             location=request.form.get('location'),
+            area=request.form.get('area') or None,
+            company_size_id=int(company_size_id) if company_size_id and company_size_id != '' else None,
+            customer_status_id=int(customer_status_id) if customer_status_id and customer_status_id != '' else None,
             memo=request.form.get('memo')
         )
         db.session.add(company)
@@ -1151,7 +1271,10 @@ def create_company():
         flash('企業を追加しました。', 'success')
         return redirect(url_for('companies'))
     
-    return render_template('company_form.html', company=None, industries=INDUSTRY_CATEGORIES)
+    company_sizes = CompanySize.query.order_by(CompanySize.sort_order).all()
+    customer_statuses = CustomerStatus.query.order_by(CustomerStatus.sort_order).all()
+    return render_template('company_form.html', company=None, industries=INDUSTRY_CATEGORIES,
+                         company_sizes=company_sizes, customer_statuses=customer_statuses)
 
 @app.route('/companies/<int:id>')
 @login_required
@@ -1169,6 +1292,7 @@ def view_company(id):
 @app.route('/companies/<int:id>/edit', methods=['GET', 'POST'])
 @login_required
 def edit_company(id):
+    from models import CompanySize, CustomerStatus
     company = Company.query.get_or_404(id)
     
     if request.method == 'POST':
@@ -1176,17 +1300,33 @@ def edit_company(id):
         industry = request.form.get('industry')
         if industry and industry not in INDUSTRY_CATEGORIES:
             flash('無効な業界が選択されています。', 'error')
-            return render_template('company_form.html', company=company, industries=INDUSTRY_CATEGORIES)
+            company_sizes = CompanySize.query.order_by(CompanySize.sort_order).all()
+            customer_statuses = CustomerStatus.query.order_by(CustomerStatus.sort_order).all()
+            return render_template('company_form.html', company=company, industries=INDUSTRY_CATEGORIES, 
+                                 company_sizes=company_sizes, customer_statuses=customer_statuses)
         
         company.name = request.form.get('name')
         company.industry = industry if industry else None
         company.location = request.form.get('location')
+        company.area = request.form.get('area') or None
         company.memo = request.form.get('memo')
+        
+        # Handle company_size_id
+        company_size_id = request.form.get('company_size_id')
+        company.company_size_id = int(company_size_id) if company_size_id and company_size_id != '' else None
+        
+        # Handle customer_status_id
+        customer_status_id = request.form.get('customer_status_id')
+        company.customer_status_id = int(customer_status_id) if customer_status_id and customer_status_id != '' else None
+        
         db.session.commit()
         flash('企業情報を更新しました。', 'success')
         return redirect(url_for('view_company', id=id))
     
-    return render_template('company_form.html', company=company, industries=INDUSTRY_CATEGORIES)
+    company_sizes = CompanySize.query.order_by(CompanySize.sort_order).all()
+    customer_statuses = CustomerStatus.query.order_by(CustomerStatus.sort_order).all()
+    return render_template('company_form.html', company=company, industries=INDUSTRY_CATEGORIES,
+                         company_sizes=company_sizes, customer_statuses=customer_statuses)
 
 @app.route('/companies/<int:id>/delete', methods=['POST'])
 @login_required
@@ -1759,7 +1899,8 @@ def create_deal():
             stage_entered_at=datetime.utcnow(),
             closed_at=closed_at,
             assignee_id=assignee_id,
-            team_id=team_id
+            team_id=team_id,
+            revenue_month=request.form.get('revenue_month') or None
         )
         
         # Set win/loss reasons
@@ -1778,8 +1919,14 @@ def create_deal():
     companies = Company.query.all()
     users = User.query.order_by(User.name).all()
     teams = Team.query.order_by(Team.name).all()
+    from models import LeadSource
+    companies = Company.query.all()
+    users = User.query.order_by(User.name).all()
+    teams = Team.query.order_by(Team.name).all()
+    lead_sources = LeadSource.query.order_by(LeadSource.sort_order).all()
     return render_template('deal_form.html', deal=None, companies=companies, users=users, teams=teams,
-                         win_reasons=WIN_REASON_CATEGORIES, loss_reasons=LOSS_REASON_CATEGORIES)
+                         win_reasons=WIN_REASON_CATEGORIES, loss_reasons=LOSS_REASON_CATEGORIES,
+                         lead_sources=lead_sources)
 
 @app.route('/deals/<int:id>')
 @login_required
@@ -1837,6 +1984,7 @@ def edit_deal(id):
         deal.meeting_minutes = request.form.get('meeting_minutes')
         deal.next_action = request.form.get('next_action')
         deal.appointment_date = appointment_date
+        deal.revenue_month = request.form.get('revenue_month') or None
         
         # Parse and set assignee_id
         assignee_id = request.form.get('assignee_id')
@@ -1845,6 +1993,43 @@ def edit_deal(id):
         # Parse and set team_id
         team_id = request.form.get('team_id')
         deal.team_id = int(team_id) if team_id and team_id != '' else None
+        
+        # Parse and set v3.0.0 analysis fields
+        lead_source_id = request.form.get('lead_source_id')
+        deal.lead_source_id = int(lead_source_id) if lead_source_id and lead_source_id != '' else None
+        deal.new_or_existing = request.form.get('new_or_existing') or None
+        deal.gross_profit = float(request.form.get('gross_profit', 0)) if request.form.get('gross_profit') else None
+        deal.probability_rank = request.form.get('probability_rank') or None
+        deal.competitor_name = request.form.get('competitor_name') or None
+        
+        # Parse date fields
+        first_contact_date_str = request.form.get('first_contact_date')
+        if first_contact_date_str:
+            try:
+                deal.first_contact_date = datetime.strptime(first_contact_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                deal.first_contact_date = None
+        
+        proposal_date_str = request.form.get('proposal_date')
+        if proposal_date_str:
+            try:
+                deal.proposal_date = datetime.strptime(proposal_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                deal.proposal_date = None
+        
+        won_date_str = request.form.get('won_date')
+        if won_date_str:
+            try:
+                deal.won_date = datetime.strptime(won_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                deal.won_date = None
+        
+        lost_date_str = request.form.get('lost_date')
+        if lost_date_str:
+            try:
+                deal.lost_date = datetime.strptime(lost_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                deal.lost_date = None
         
         # Set win/loss reasons
         if new_status == 'WON':
@@ -1864,11 +2049,14 @@ def edit_deal(id):
         flash('案件情報を更新しました。', 'success')
         return redirect(url_for('deals'))
     
+    from models import LeadSource
     companies = Company.query.all()
     users = User.query.order_by(User.name).all()
     teams = Team.query.order_by(Team.name).all()
+    lead_sources = LeadSource.query.order_by(LeadSource.sort_order).all()
     return render_template('deal_form.html', deal=deal, companies=companies, users=users, teams=teams,
-                         win_reasons=WIN_REASON_CATEGORIES, loss_reasons=LOSS_REASON_CATEGORIES)
+                         win_reasons=WIN_REASON_CATEGORIES, loss_reasons=LOSS_REASON_CATEGORIES,
+                         lead_sources=lead_sources)
 
 @app.route('/deals/<int:id>/delete', methods=['POST'])
 @login_required
@@ -2915,53 +3103,156 @@ def api_dashboard_kpis():
         last_period_start = current_period_start - relativedelta(months=1)
         last_period_end = current_period_start - relativedelta(days=1)
     
-    # Monthly revenue (won deals)
-    current_month_revenue = db.session.query(
-        db.func.coalesce(db.func.sum(Deal.amount), 0)
-    ).filter(
-        Deal.status == '受注',
-        Deal.created_at >= current_period_start,
-        Deal.created_at <= current_period_end
-    ).scalar()
+    # Monthly revenue (won deals) - always use revenue_month field for consistency
+    # Build revenue_month range filters for all periods
+    if period in ['current_month', 'last_month']:
+        current_revenue_month = current_period_start.strftime('%Y-%m')
+        last_revenue_month = last_period_start.strftime('%Y-%m')
+    elif period == 'current_year':
+        current_year = current_period_start.year
+        current_revenue_month_start = f'{current_year}-01'
+        current_revenue_month_end = today.strftime('%Y-%m')  # 当月まで（当日ではなく月単位）
+        last_year = current_year - 1
+        last_revenue_month_start = f'{last_year}-01'
+        last_revenue_month_end = (today - relativedelta(years=1)).strftime('%Y-%m')
+    else:  # custom
+        current_revenue_month_start = current_period_start.strftime('%Y-%m')
+        current_revenue_month_end = current_period_end.strftime('%Y-%m')
+        last_period_end_temp = current_period_start - relativedelta(days=1)
+        last_period_start_temp = last_period_end_temp - relativedelta(days=(current_period_end - current_period_start).days)
+        last_revenue_month_start = last_period_start_temp.strftime('%Y-%m')
+        last_revenue_month_end = last_period_end_temp.strftime('%Y-%m')
     
-    last_month_revenue = db.session.query(
-        db.func.coalesce(db.func.sum(Deal.amount), 0)
-    ).filter(
-        Deal.status == '受注',
-        Deal.created_at >= last_period_start,
-        Deal.created_at <= last_period_end
-    ).scalar()
+    if period in ['current_month', 'last_month']:
+        current_month_revenue = db.session.query(
+            db.func.coalesce(db.func.sum(Deal.amount), 0)
+        ).filter(
+            db.or_(Deal.status == '受注', Deal.status == 'WON'),
+            Deal.revenue_month == current_revenue_month
+        ).scalar()
+        
+        last_month_revenue = db.session.query(
+            db.func.coalesce(db.func.sum(Deal.amount), 0)
+        ).filter(
+            db.or_(Deal.status == '受注', Deal.status == 'WON'),
+            Deal.revenue_month == last_revenue_month
+        ).scalar()
+    else:
+        # For year/custom, filter by revenue_month range (using >= and <=)
+        current_month_revenue = db.session.query(
+            db.func.coalesce(db.func.sum(Deal.amount), 0)
+        ).filter(
+            db.or_(Deal.status == '受注', Deal.status == 'WON'),
+            Deal.revenue_month >= current_revenue_month_start,
+            Deal.revenue_month <= current_revenue_month_end
+        ).scalar()
+        
+        last_month_revenue = db.session.query(
+            db.func.coalesce(db.func.sum(Deal.amount), 0)
+        ).filter(
+            db.or_(Deal.status == '受注', Deal.status == 'WON'),
+            Deal.revenue_month >= last_revenue_month_start,
+            Deal.revenue_month <= last_revenue_month_end
+        ).scalar()
     
-    # Pipeline value by stage
-    pipeline_by_stage = db.session.query(
-        Deal.stage, 
-        db.func.sum(Deal.amount).label('total')
-    ).filter(
-        Deal.status == '進行中'
-    ).group_by(Deal.stage).all()
+    # Pipeline value by stage - filtered by revenue_month period (consistent with revenue filtering)
+    pipeline_filter = db.or_(Deal.status == '進行中', Deal.status == 'OPEN')
+    
+    if period in ['current_month', 'last_month']:
+        # Filter by revenue_month for monthly view (exact match, no NULL)
+        current_revenue_month = current_period_start.strftime('%Y-%m')
+        pipeline_by_stage = db.session.query(
+            Deal.stage, 
+            db.func.sum(Deal.amount).label('total')
+        ).filter(
+            pipeline_filter,
+            db.or_(
+                Deal.revenue_month == current_revenue_month,
+                Deal.revenue_month.is_(None)
+            )
+        ).group_by(Deal.stage).all()
+    else:
+        # For year/custom, filter by revenue_month range (include NULL for open deals)
+        pipeline_by_stage = db.session.query(
+            Deal.stage, 
+            db.func.sum(Deal.amount).label('total')
+        ).filter(
+            pipeline_filter,
+            db.or_(
+                db.and_(Deal.revenue_month >= current_revenue_month_start, Deal.revenue_month <= current_revenue_month_end),
+                Deal.revenue_month.is_(None)
+            )
+        ).group_by(Deal.stage).all()
     
     total_pipeline = sum(stage[1] for stage in pipeline_by_stage if stage[1])
     
-    # Active deals count
-    active_deals = Deal.query.filter_by(status='進行中').count()
-    won_deals = Deal.query.filter_by(status='受注').count()
-    lost_deals = Deal.query.filter_by(status='失注').count()
+    # Active deals count - same period filter as pipeline (using revenue_month, include NULL)
+    if period in ['current_month', 'last_month']:
+        current_revenue_month = current_period_start.strftime('%Y-%m')
+        active_deals = Deal.query.filter(
+            pipeline_filter,
+            db.or_(Deal.revenue_month == current_revenue_month, Deal.revenue_month.is_(None))
+        ).count()
+        won_deals = Deal.query.filter(
+            db.or_(Deal.status == '受注', Deal.status == 'WON'),
+            Deal.revenue_month == current_revenue_month
+        ).count()
+        lost_deals = Deal.query.filter(
+            db.or_(Deal.status == '失注', Deal.status == 'LOST'),
+            Deal.revenue_month == current_revenue_month
+        ).count()
+    else:
+        active_deals = Deal.query.filter(
+            pipeline_filter,
+            db.or_(
+                db.and_(Deal.revenue_month >= current_revenue_month_start, Deal.revenue_month <= current_revenue_month_end),
+                Deal.revenue_month.is_(None)
+            )
+        ).count()
+        won_deals = Deal.query.filter(
+            db.or_(Deal.status == '受注', Deal.status == 'WON'),
+            Deal.revenue_month >= current_revenue_month_start,
+            Deal.revenue_month <= current_revenue_month_end
+        ).count()
+        lost_deals = Deal.query.filter(
+            db.or_(Deal.status == '失注', Deal.status == 'LOST'),
+            Deal.revenue_month >= current_revenue_month_start,
+            Deal.revenue_month <= current_revenue_month_end
+        ).count()
     
     # Win rate
     total_closed = won_deals + lost_deals
     win_rate = (won_deals / total_closed * 100) if total_closed > 0 else 0
     
-    # Top companies by deal value
-    top_companies = db.session.query(
-        Company.id,
-        Company.name,
-        db.func.sum(Deal.amount).label('total_value'),
-        db.func.count(Deal.id).label('deal_count')
-    ).join(Deal).filter(
-        Deal.status == '進行中'
-    ).group_by(Company.id, Company.name).order_by(
-        db.text('total_value DESC')
-    ).limit(5).all()
+    # Top companies by deal value - same period filter as pipeline (include NULL)
+    if period in ['current_month', 'last_month']:
+        current_revenue_month = current_period_start.strftime('%Y-%m')
+        top_companies = db.session.query(
+            Company.id,
+            Company.name,
+            db.func.sum(Deal.amount).label('total_value'),
+            db.func.count(Deal.id).label('deal_count')
+        ).join(Deal).filter(
+            pipeline_filter,
+            db.or_(Deal.revenue_month == current_revenue_month, Deal.revenue_month.is_(None))
+        ).group_by(Company.id, Company.name).order_by(
+            db.text('total_value DESC')
+        ).limit(5).all()
+    else:
+        top_companies = db.session.query(
+            Company.id,
+            Company.name,
+            db.func.sum(Deal.amount).label('total_value'),
+            db.func.count(Deal.id).label('deal_count')
+        ).join(Deal).filter(
+            pipeline_filter,
+            db.or_(
+                db.and_(Deal.revenue_month >= current_revenue_month_start, Deal.revenue_month <= current_revenue_month_end),
+                Deal.revenue_month.is_(None)
+            )
+        ).group_by(Company.id, Company.name).order_by(
+            db.text('total_value DESC')
+        ).limit(5).all()
     
     # Deals with long stage duration (30+ days)
     stale_deals = Deal.query.filter(
@@ -2971,11 +3262,79 @@ def api_dashboard_kpis():
     
     stale_count = sum(1 for deal in stale_deals if deal.days_in_stage and deal.days_in_stage >= 30)
     
-    # Activities in selected period
-    activities_count = Activity.query.filter(
-        Activity.happened_at >= current_period_start,
-        Activity.happened_at <= current_period_end
+    # Activities in selected period - use raw SQL to avoid "count" column conflict
+    activities_sql = db.text("""
+        SELECT COUNT(*) FROM activities
+        WHERE happened_at >= :start_date AND happened_at <= :end_date
+    """)
+    activities_count = db.session.execute(activities_sql, {
+        'start_date': current_period_start,
+        'end_date': current_period_end
+    }).scalar() or 0
+    
+    # New leads (deals created in the period)
+    new_leads_count = Deal.query.filter(
+        Deal.created_at >= datetime.combine(current_period_start, datetime.min.time()),
+        Deal.created_at <= datetime.combine(current_period_end, datetime.max.time())
     ).count()
+    
+    # Last period new leads for comparison
+    last_new_leads_count = Deal.query.filter(
+        Deal.created_at >= datetime.combine(last_period_start, datetime.min.time()),
+        Deal.created_at <= datetime.combine(last_period_end, datetime.max.time())
+    ).count()
+    
+    # Last period pipeline value for comparison
+    if period in ['current_month', 'last_month']:
+        last_revenue_month = last_period_start.strftime('%Y-%m')
+        last_pipeline_by_stage = db.session.query(
+            db.func.sum(Deal.amount).label('total')
+        ).filter(
+            pipeline_filter,
+            db.or_(Deal.revenue_month == last_revenue_month, Deal.revenue_month.is_(None))
+        ).scalar()
+        last_pipeline_total = float(last_pipeline_by_stage) if last_pipeline_by_stage else 0
+        
+        # Last period win rate
+        last_won_deals = Deal.query.filter(
+            db.or_(Deal.status == '受注', Deal.status == 'WON'),
+            Deal.revenue_month == last_revenue_month
+        ).count()
+        last_lost_deals = Deal.query.filter(
+            db.or_(Deal.status == '失注', Deal.status == 'LOST'),
+            Deal.revenue_month == last_revenue_month
+        ).count()
+    else:
+        last_pipeline_by_stage = db.session.query(
+            db.func.sum(Deal.amount).label('total')
+        ).filter(
+            pipeline_filter,
+            db.or_(
+                db.and_(Deal.revenue_month >= last_revenue_month_start, Deal.revenue_month <= last_revenue_month_end),
+                Deal.revenue_month.is_(None)
+            )
+        ).scalar()
+        last_pipeline_total = float(last_pipeline_by_stage) if last_pipeline_by_stage else 0
+        
+        # Last period win rate
+        last_won_deals = Deal.query.filter(
+            db.or_(Deal.status == '受注', Deal.status == 'WON'),
+            Deal.revenue_month >= last_revenue_month_start,
+            Deal.revenue_month <= last_revenue_month_end
+        ).count()
+        last_lost_deals = Deal.query.filter(
+            db.or_(Deal.status == '失注', Deal.status == 'LOST'),
+            Deal.revenue_month >= last_revenue_month_start,
+            Deal.revenue_month <= last_revenue_month_end
+        ).count()
+    
+    last_total_closed = last_won_deals + last_lost_deals
+    last_win_rate = (last_won_deals / last_total_closed * 100) if last_total_closed > 0 else 0
+    
+    # Calculate growth rates
+    pipeline_growth = ((total_pipeline - last_pipeline_total) / last_pipeline_total * 100) if last_pipeline_total > 0 else 0
+    win_rate_change = win_rate - last_win_rate
+    new_leads_growth = ((new_leads_count - last_new_leads_count) / last_new_leads_count * 100) if last_new_leads_count > 0 else 0
     
     return jsonify({
         'revenue': {
@@ -2985,13 +3344,17 @@ def api_dashboard_kpis():
         },
         'pipeline': {
             'total_value': float(total_pipeline) if total_pipeline else 0,
+            'last_value': last_pipeline_total,
+            'growth_rate': round(pipeline_growth, 1),
             'active_deals': active_deals,
             'by_stage': [{'stage': stage, 'value': float(value)} for stage, value in pipeline_by_stage]
         },
         'conversion': {
             'won': won_deals,
             'lost': lost_deals,
-            'win_rate': round(win_rate, 1)
+            'win_rate': round(win_rate, 1),
+            'last_win_rate': round(last_win_rate, 1),
+            'win_rate_change': round(win_rate_change, 1)
         },
         'top_companies': [{
             'id': comp[0],
@@ -3004,7 +3367,10 @@ def api_dashboard_kpis():
         },
         'activities': {
             'this_month': activities_count
-        }
+        },
+        'new_leads': new_leads_count,
+        'new_leads_last': last_new_leads_count,
+        'new_leads_growth': round(new_leads_growth, 1)
     })
 
 @app.route('/api/dashboard/revenue-by-assignee')
@@ -4584,9 +4950,527 @@ def list_backups_api():
         return jsonify({'success': False, 'error': str(e)}), 400
 
 
+# ==========================================
+# Cross-Tabulation Analytics APIs (v3.0.0)
+# ==========================================
+
+def get_cross_tab_date_range():
+    """Helper to get date range from request parameters"""
+    from datetime import date
+    from dateutil.relativedelta import relativedelta
+    
+    period = request.args.get('period', 'current_month')
+    today = date.today()
+    
+    if period == 'current_month':
+        start_date = date(today.year, today.month, 1)
+        end_date = today
+    elif period == 'last_month':
+        start_date = date(today.year, today.month, 1) - relativedelta(months=1)
+        end_date = date(today.year, today.month, 1) - relativedelta(days=1)
+    elif period == 'last_3_months':
+        start_date = today - relativedelta(months=3)
+        end_date = today
+    elif period == 'last_6_months':
+        start_date = today - relativedelta(months=6)
+        end_date = today
+    elif period == 'current_year':
+        start_date = date(today.year, 1, 1)
+        end_date = today
+    elif period == 'custom':
+        start_str = request.args.get('start_date')
+        end_str = request.args.get('end_date')
+        try:
+            start_date = datetime.strptime(start_str, '%Y-%m-%d').date() if start_str else date(today.year, today.month, 1)
+            end_date = datetime.strptime(end_str, '%Y-%m-%d').date() if end_str else today
+        except:
+            start_date = date(today.year, today.month, 1)
+            end_date = today
+    else:
+        start_date = date(today.year, today.month, 1)
+        end_date = today
+    
+    return start_date, end_date
+
+
+@app.route('/api/analytics/lead-source')
+@login_required
+def api_analytics_lead_source():
+    """Cross-tabulation: Lead Source × Results (Optimized with aggregation queries)"""
+    from models import LeadSource
+    
+    start_date, end_date = get_cross_tab_date_range()
+    
+    # Use aggregation query to avoid N+1
+    # Subquery for deals with outcomes in period (won or lost)
+    lead_source_stats = db.session.query(
+        Deal.lead_source_id,
+        db.func.count(Deal.id).label('total_deals'),
+        db.func.sum(db.case((Deal.status == 'WON', 1), else_=0)).label('won_count'),
+        db.func.sum(db.case((Deal.first_contact_date != None, 1), else_=0)).label('has_first_contact'),
+        db.func.sum(db.case((Deal.status == 'WON', Deal.amount), else_=0)).label('won_amount')
+    ).filter(
+        db.or_(
+            db.and_(Deal.status == 'WON', Deal.won_date >= start_date, Deal.won_date <= end_date),
+            db.and_(Deal.status == 'LOST', Deal.lost_date >= start_date, Deal.lost_date <= end_date),
+            db.and_(Deal.status == 'OPEN', Deal.created_at >= datetime.combine(start_date, datetime.min.time()))
+        )
+    ).group_by(Deal.lead_source_id).all()
+    
+    # Build lookup
+    stats_map = {s.lead_source_id: s for s in lead_source_stats}
+    
+    # Get all lead sources
+    lead_sources = LeadSource.query.order_by(LeadSource.sort_order).all()
+    
+    results = []
+    for ls in lead_sources:
+        stats = stats_map.get(ls.id)
+        if not stats:
+            continue
+            
+        total = stats.total_deals or 0
+        won = stats.won_count or 0
+        has_fc = stats.has_first_contact or 0
+        amount = stats.won_amount or 0
+        
+        results.append({
+            'lead_source': ls.name,
+            'lead_count': total,
+            'appointment_rate': round(has_fc / total * 100, 1) if total > 0 else 0,
+            'win_rate': round(won / total * 100, 1) if total > 0 else 0,
+            'avg_amount': round(amount / won) if won > 0 else 0,
+            'avg_ltv': round(amount / won) if won > 0 else 0  # Simplified LTV
+        })
+    
+    # Add deals without lead_source
+    unknown_stats = stats_map.get(None)
+    if unknown_stats and unknown_stats.total_deals > 0:
+        total = unknown_stats.total_deals or 0
+        won = unknown_stats.won_count or 0
+        has_fc = unknown_stats.has_first_contact or 0
+        amount = unknown_stats.won_amount or 0
+        results.append({
+            'lead_source': '未設定',
+            'lead_count': total,
+            'appointment_rate': round(has_fc / total * 100, 1) if total > 0 else 0,
+            'win_rate': round(won / total * 100, 1) if total > 0 else 0,
+            'avg_amount': round(amount / won) if won > 0 else 0,
+            'avg_ltv': 0
+        })
+    
+    return jsonify({'data': results, 'period': {'start': str(start_date), 'end': str(end_date)}})
+
+
+@app.route('/api/analytics/industry')
+@login_required
+def api_analytics_industry():
+    """Cross-tabulation: Industry × Win Rate / Revenue (Optimized)"""
+    start_date, end_date = get_cross_tab_date_range()
+    
+    # Use aggregation query with proper date filtering
+    industry_stats = db.session.query(
+        Company.industry,
+        db.func.count(Deal.id).label('total_deals'),
+        db.func.sum(db.case((Deal.status == 'WON', 1), else_=0)).label('won_count'),
+        db.func.sum(db.case((Deal.status == 'WON', Deal.amount), else_=0)).label('won_amount'),
+        db.func.avg(db.case(
+            (db.and_(Deal.status == 'WON', Deal.first_contact_date != None, Deal.won_date != None),
+             Deal.won_date - Deal.first_contact_date),
+            else_=None
+        )).label('avg_lead_time')
+    ).join(Company).filter(
+        Company.industry != None,
+        Company.industry != '',
+        db.or_(
+            db.and_(Deal.status == 'WON', Deal.won_date >= start_date, Deal.won_date <= end_date),
+            db.and_(Deal.status == 'LOST', Deal.lost_date >= start_date, Deal.lost_date <= end_date),
+            db.and_(Deal.status == 'OPEN', Deal.created_at >= datetime.combine(start_date, datetime.min.time()))
+        )
+    ).group_by(Company.industry).all()
+    
+    results = []
+    for stats in industry_stats:
+        if not stats.industry:
+            continue
+            
+        total = stats.total_deals or 0
+        won = stats.won_count or 0
+        revenue = stats.won_amount or 0
+        
+        results.append({
+            'industry': stats.industry,
+            'deal_count': total,
+            'win_rate': round(won / total * 100, 1) if total > 0 else 0,
+            'total_revenue': revenue,
+            'avg_amount': round(revenue / won) if won > 0 else 0,
+            'avg_lead_time_days': round(stats.avg_lead_time) if stats.avg_lead_time else None
+        })
+    
+    # Sort by total_revenue desc
+    results.sort(key=lambda x: x['total_revenue'], reverse=True)
+    
+    return jsonify({'data': results, 'period': {'start': str(start_date), 'end': str(end_date)}})
+
+
+@app.route('/api/analytics/assignee-activity')
+@login_required
+def api_analytics_assignee_activity():
+    """Cross-tabulation: Assignee × Activity × Win Rate (Optimized)"""
+    start_date, end_date = get_cross_tab_date_range()
+    
+    # Activity counts by user (using happened_at for period filtering)
+    # Use raw SQL to avoid ORM issues with "count" column name
+    activity_sql = db.text("""
+        SELECT user_id, SUM(COALESCE(count, 1)) as activity_count
+        FROM activities
+        WHERE happened_at >= :start_date AND happened_at <= :end_date
+        GROUP BY user_id
+    """)
+    activity_result = db.session.execute(activity_sql, {
+        'start_date': datetime.combine(start_date, datetime.min.time()),
+        'end_date': datetime.combine(end_date, datetime.max.time())
+    }).fetchall()
+    activity_map = {row[0]: (row[1] or 0) for row in activity_result}
+    
+    # Deal stats by assignee (using won_date/lost_date for period filtering)
+    deal_stats = db.session.query(
+        Deal.assignee_id,
+        db.func.count(Deal.id).label('total_deals'),
+        db.func.sum(db.case((Deal.status == 'WON', 1), else_=0)).label('won_count'),
+        db.func.sum(db.case((Deal.status == 'WON', Deal.amount), else_=0)).label('won_amount')
+    ).filter(
+        Deal.assignee_id != None,
+        db.or_(
+            db.and_(Deal.status == 'WON', Deal.won_date >= start_date, Deal.won_date <= end_date),
+            db.and_(Deal.status == 'LOST', Deal.lost_date >= start_date, Deal.lost_date <= end_date),
+            db.and_(Deal.status == 'OPEN', Deal.created_at >= datetime.combine(start_date, datetime.min.time()))
+        )
+    ).group_by(Deal.assignee_id).all()
+    deal_map = {d.assignee_id: d for d in deal_stats}
+    
+    # Get users with either activities or deals
+    user_ids = set(activity_map.keys()) | set(deal_map.keys())
+    users = User.query.filter(User.id.in_(user_ids)).order_by(User.name).all() if user_ids else []
+    
+    results = []
+    for user in users:
+        activity_count = activity_map.get(user.id, 0)
+        d_stats = deal_map.get(user.id)
+        
+        total_deals = d_stats.total_deals if d_stats else 0
+        won_count = d_stats.won_count if d_stats else 0
+        total_revenue = d_stats.won_amount if d_stats else 0
+        
+        results.append({
+            'assignee': user.name,
+            'assignee_id': user.id,
+            'activity_count': int(activity_count),
+            'deal_count': total_deals,
+            'won_count': won_count,
+            'win_rate': round(won_count / total_deals * 100, 1) if total_deals > 0 else 0,
+            'total_revenue': total_revenue or 0
+        })
+    
+    return jsonify({'data': results, 'period': {'start': str(start_date), 'end': str(end_date)}})
+
+
+@app.route('/api/analytics/stage-funnel')
+@login_required
+def api_analytics_stage_funnel():
+    """Cross-tabulation: Stage Funnel Analysis (Optimized)"""
+    start_date, end_date = get_cross_tab_date_range()
+    
+    stage_order = ['リード', 'アポ', 'ヒアリング', '見積・提案', '最終調整', '受注', '失注']
+    
+    # Use aggregation query for current stage distribution
+    stage_stats = db.session.query(
+        Deal.stage,
+        db.func.count(Deal.id).label('count'),
+        db.func.sum(Deal.amount).label('amount')
+    ).filter(
+        Deal.stage.in_(stage_order)
+    ).group_by(Deal.stage).all()
+    
+    stats_map = {s.stage: {'count': s.count or 0, 'amount': s.amount or 0} for s in stage_stats}
+    
+    results = []
+    prev_count = None
+    
+    for stage_name in stage_order:
+        stats = stats_map.get(stage_name, {'count': 0, 'amount': 0})
+        count = stats['count']
+        amount = stats['amount']
+        
+        # Transition rate from previous stage
+        transition_rate = None
+        if prev_count is not None and prev_count > 0:
+            transition_rate = round(count / prev_count * 100, 1)
+        
+        results.append({
+            'stage': stage_name,
+            'count': count,
+            'amount': amount,
+            'transition_rate': transition_rate,
+            'avg_days': 0  # Simplified - avg stage time requires more complex query
+        })
+        
+        if stage_name not in ['受注', '失注']:
+            prev_count = count
+    
+    return jsonify({'data': results, 'period': {'start': str(start_date), 'end': str(end_date)}})
+
+
+@app.route('/api/analytics/lost-reason')
+@login_required
+def api_analytics_lost_reason():
+    """Cross-tabulation: Lost Reason × Industry / Assignee"""
+    start_date, end_date = get_cross_tab_date_range()
+    mode = request.args.get('mode', 'industry')  # 'industry' or 'assignee'
+    
+    # Get lost deals - use closed_at or lost_date for filtering
+    lost_deals_query = Deal.query.filter(Deal.status == 'LOST')
+    
+    # Filter by date range using closed_at or lost_date
+    lost_deals_query = lost_deals_query.filter(
+        db.or_(
+            db.and_(Deal.closed_at.isnot(None), Deal.closed_at >= datetime.combine(start_date, datetime.min.time()), Deal.closed_at <= datetime.combine(end_date, datetime.max.time())),
+            db.and_(Deal.lost_date.isnot(None), Deal.lost_date >= start_date, Deal.lost_date <= end_date),
+            db.and_(Deal.closed_at.is_(None), Deal.lost_date.is_(None))  # Include deals without dates
+        )
+    )
+    
+    lost_deals = lost_deals_query.all()
+    
+    if mode == 'industry':
+        # Group by lost_reason_category - simple count by reason
+        reason_counts = {}
+        for d in lost_deals:
+            reason = d.lost_reason_category or '未設定'
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+        
+        # Format for JavaScript: expects 'reason' and 'count'
+        results = [{'reason': reason, 'count': count} for reason, count in reason_counts.items()]
+        results.sort(key=lambda x: x['count'], reverse=True)
+        
+    else:  # mode == 'assignee'
+        # Group by assignee, then by reason
+        assignee_reason_counts = {}
+        for d in lost_deals:
+            assignee_name = d.get_assignee_name() or '未割当'
+            reason = d.lost_reason_category or '未設定'
+            
+            if assignee_name not in assignee_reason_counts:
+                assignee_reason_counts[assignee_name] = {}
+            assignee_reason_counts[assignee_name][reason] = assignee_reason_counts[assignee_name].get(reason, 0) + 1
+        
+        # Flatten to reason counts across all assignees
+        reason_counts = {}
+        for assignee, reasons in assignee_reason_counts.items():
+            for reason, count in reasons.items():
+                reason_counts[reason] = reason_counts.get(reason, 0) + count
+        
+        # Format for JavaScript: expects 'reason' and 'count'
+        results = [{'reason': reason, 'count': count} for reason, count in reason_counts.items()]
+        results.sort(key=lambda x: x['count'], reverse=True)
+    
+    return jsonify({'data': results, 'mode': mode, 'period': {'start': str(start_date), 'end': str(end_date)}})
+
+
+@app.route('/api/analytics/monthly-trend')
+@login_required
+def api_analytics_monthly_trend():
+    """Cross-tabulation: Monthly Trend (Revenue, New Customers, Win Rate)"""
+    from dateutil.relativedelta import relativedelta
+    from datetime import date
+    
+    months = int(request.args.get('months', 6))
+    today = date.today()
+    
+    results = []
+    for i in range(months - 1, -1, -1):
+        month_date = today - relativedelta(months=i)
+        month_str = month_date.strftime('%Y-%m')
+        month_start = date(month_date.year, month_date.month, 1)
+        if i == 0:
+            month_end = today
+        else:
+            month_end = (month_start + relativedelta(months=1)) - relativedelta(days=1)
+        
+        # Revenue (won deals with revenue_month)
+        revenue = db.session.query(db.func.coalesce(db.func.sum(Deal.amount), 0)).filter(
+            db.or_(Deal.status == 'WON', Deal.status == '受注'),
+            Deal.revenue_month == month_str
+        ).scalar() or 0
+        
+        # New customers (companies created in this month)
+        new_customers = Company.query.filter(
+            Company.created_at >= datetime.combine(month_start, datetime.min.time()),
+            Company.created_at <= datetime.combine(month_end, datetime.max.time())
+        ).count()
+        
+        # Win rate (closed deals in this month)
+        closed_deals = Deal.query.filter(
+            Deal.closed_at >= datetime.combine(month_start, datetime.min.time()),
+            Deal.closed_at <= datetime.combine(month_end, datetime.max.time())
+        ).all()
+        
+        won_count = len([d for d in closed_deals if d.status == 'WON'])
+        total_closed = len(closed_deals)
+        win_rate = round(won_count / total_closed * 100, 1) if total_closed > 0 else 0
+        
+        results.append({
+            'month': month_str,
+            'month_label': f"{month_date.year}年{month_date.month}月",
+            'revenue': revenue,
+            'new_customers': new_customers,
+            'win_rate': win_rate,
+            'won_count': won_count,
+            'closed_count': total_closed
+        })
+    
+    return jsonify({'data': results})
+
+
+@app.route('/api/analytics/kpi-summary')
+@login_required
+def api_analytics_kpi_summary():
+    """Enhanced KPI Summary for Cross-Tab Dashboard (Optimized)"""
+    from datetime import date
+    
+    start_date, end_date = get_cross_tab_date_range()
+    
+    # Revenue (won in period by won_date)
+    revenue = db.session.query(db.func.coalesce(db.func.sum(Deal.amount), 0)).filter(
+        Deal.status == 'WON',
+        Deal.won_date >= start_date,
+        Deal.won_date <= end_date
+    ).scalar() or 0
+    
+    # New deals (new_or_existing = 新規 and WON)
+    new_won_count = db.session.query(db.func.count(Deal.id)).filter(
+        Deal.new_or_existing == '新規',
+        Deal.status == 'WON',
+        Deal.won_date >= start_date,
+        Deal.won_date <= end_date
+    ).scalar() or 0
+    
+    # Win rate (closed deals in period using won_date/lost_date)
+    won_in_period = db.session.query(db.func.count(Deal.id)).filter(
+        Deal.status == 'WON',
+        Deal.won_date >= start_date,
+        Deal.won_date <= end_date
+    ).scalar() or 0
+    
+    lost_in_period = db.session.query(db.func.count(Deal.id)).filter(
+        Deal.status == 'LOST',
+        Deal.lost_date >= start_date,
+        Deal.lost_date <= end_date
+    ).scalar() or 0
+    
+    total_closed = won_in_period + lost_in_period
+    win_rate = round(won_in_period / total_closed * 100, 1) if total_closed > 0 else 0
+    
+    # New leads (first_contact_date in period)
+    new_leads = db.session.query(db.func.count(Deal.id)).filter(
+        Deal.first_contact_date >= start_date,
+        Deal.first_contact_date <= end_date
+    ).scalar() or 0
+    
+    return jsonify({
+        'revenue': float(revenue),
+        'new_won_count': new_won_count,
+        'win_rate': win_rate,
+        'new_leads': new_leads,
+        'period': {'start': str(start_date), 'end': str(end_date)}
+    })
+
+
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all()
+        # データベースの初期化とマイグレーション
+        try:
+            # 既存のテーブルがあるか確認
+            db.session.execute(db.text('SELECT 1'))
+            print("✓ Database connection established")
+            # 既存データベースの場合はマイグレーションを実行
+            database_url = os.environ.get('DATABASE_URL', '')
+            if database_url and 'postgresql' in database_url:
+                print("Running PostgreSQL migration...")
+                # PostgreSQL用のマイグレーション
+                migrations = [
+                    """
+                    DO $$ BEGIN
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS employee_size INTEGER;
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS hq_location VARCHAR(200);
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS website VARCHAR(300);
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS needs TEXT;
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS kpi_current TEXT;
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS heat_score INTEGER DEFAULT 1;
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS last_contacted_at TIMESTAMP;
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS next_action_at TIMESTAMP;
+                        ALTER TABLE companies ADD COLUMN IF NOT EXISTS tags VARCHAR(500);
+                    END $$;
+                    """,
+                    """
+                    DO $$ BEGIN
+                        ALTER TABLE contacts ADD COLUMN IF NOT EXISTS role VARCHAR(100);
+                        ALTER TABLE contacts ADD COLUMN IF NOT EXISTS notes TEXT;
+                    END $$;
+                    """,
+                    """
+                    DO $$ BEGIN
+                        ALTER TABLE deals ADD COLUMN IF NOT EXISTS win_reason TEXT;
+                        ALTER TABLE deals ADD COLUMN IF NOT EXISTS lost_reason TEXT;
+                        ALTER TABLE deals ADD COLUMN IF NOT EXISTS stage_entered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+                        ALTER TABLE deals ADD COLUMN IF NOT EXISTS assignee VARCHAR(100);
+                    END $$;
+                    """,
+                    """
+                    CREATE TABLE IF NOT EXISTS activities (
+                        id SERIAL PRIMARY KEY,
+                        company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        deal_id INTEGER REFERENCES deals(id) ON DELETE CASCADE,
+                        type VARCHAR(20) NOT NULL CHECK (type IN ('call', 'meeting', 'email', 'note')),
+                        title VARCHAR(200) NOT NULL,
+                        body TEXT,
+                        happened_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    );
+                    """,
+                    """
+                    CREATE INDEX IF NOT EXISTS ix_companies_name ON companies(name);
+                    CREATE INDEX IF NOT EXISTS ix_companies_industry ON companies(industry);
+                    CREATE INDEX IF NOT EXISTS ix_companies_heat_score ON companies(heat_score);
+                    CREATE INDEX IF NOT EXISTS ix_deals_stage ON deals(stage);
+                    CREATE INDEX IF NOT EXISTS ix_deals_status ON deals(status);
+                    CREATE INDEX IF NOT EXISTS ix_deals_assignee ON deals(assignee);
+                    CREATE INDEX IF NOT EXISTS ix_deals_closed_at ON deals(closed_at);
+                    CREATE INDEX IF NOT EXISTS ix_deals_win_reason_category ON deals(win_reason_category);
+                    CREATE INDEX IF NOT EXISTS ix_deals_lost_reason_category ON deals(lost_reason_category);
+                    CREATE INDEX IF NOT EXISTS ix_activities_company_id ON activities(company_id);
+                    CREATE INDEX IF NOT EXISTS ix_activities_happened_at ON activities(happened_at);
+                    CREATE INDEX IF NOT EXISTS ix_activities_company_happened ON activities(company_id, happened_at);
+                    """
+                ]
+                for i, migration in enumerate(migrations, 1):
+                    try:
+                        db.session.execute(db.text(migration))
+                        db.session.commit()
+                        print(f"✓ Migration {i} completed")
+                    except Exception as e:
+                        print(f"Note: Migration {i} - {e}")
+                        db.session.rollback()
+            else:
+                print("Running SQLite migration...")
+                db.create_all()
+                print("✓ Tables created/updated")
+        except Exception as e:
+            # データベースが存在しない場合は新規作成
+            print(f"Creating new database schema...")
+            db.create_all()
+            print("✓ Database schema created")
     
     # Start backup scheduler if enabled
     if os.environ.get('ENABLE_BACKUP_SCHEDULER', 'False').lower() == 'true':
@@ -4608,8 +5492,9 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"✗ Failed to start backup scheduler: {e}")
     
-    # macOSのAirPlay Receiverがポート5000を使用している場合があるため、5001を使用
+    # Replit環境対応：ホストは0.0.0.0、ポート5000を使用
     # 本番環境では環境変数PORTを使用し、debug=Falseに設定
-    port = int(os.environ.get('PORT', 5001))
-    debug = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
-    app.run(host='127.0.0.1', port=port, debug=debug)
+    port = int(os.environ.get('PORT', 5001))  # デフォルトを5001に変更（5000が使用中の場合）
+    # 本番環境ではデフォルトでFalse、開発時は環境変数FLASK_DEBUG=Trueで有効化
+    debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    app.run(host='0.0.0.0', port=port, debug=debug)
