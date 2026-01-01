@@ -221,15 +221,15 @@ document.getElementById('verify2FAForm')?.addEventListener('submit', function(e)
     const codeIdInput = document.getElementById('email_code_id');
     const codeId = codeIdInput ? codeIdInput.value : (window.emailCodeId || null);
     
-    if (!codeId) {
-        alert('エラー: コードIDが見つかりません。新しいコードを送信してください。');
-        return;
-    }
-    
+    // Code IDがなくても、サーバー側で最新のコードを探すようにする
     const body = { 
-        code: code,
-        code_id: codeId
+        code: code
     };
+    
+    // Code IDがある場合は追加
+    if (codeId) {
+        body.code_id = codeId;
+    }
     
     fetch('/api/2fa/verify', {
         method: 'POST',
