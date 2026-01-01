@@ -2538,7 +2538,17 @@ def setup_2fa():
             app.logger.warning(f"[2FA Setup] SMTP設定がありません。認証コード: {code} (Code ID: {email_code.id})")
         
         # Send email
-        email_sent = send_2fa_email(user.email, code)
+        try:
+            email_sent = send_2fa_email(user.email, code)
+        except Exception as email_error:
+            import traceback
+            error_traceback = traceback.format_exc()
+            app.logger.error(f"[2FA Setup] メール送信で例外が発生: {email_error}")
+            app.logger.error(f"[2FA Setup] 例外の詳細:\n{error_traceback}")
+            # エラーが発生しても、認証コードはデータベースに保存されているので、ログに表示
+            app.logger.warning(f"[2FA Setup] 認証コード（ログから確認）: {code} (Code ID: {email_code.id})")
+            # エラーを再発生させて、外側のハンドラーで処理
+            raise
         
         if email_sent:
             log_security_event('2fa_setup_initiated', f'User {user.email} initiated email 2FA setup', user.id, ip_address=get_client_ip(), user_agent=get_user_agent())

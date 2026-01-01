@@ -121,19 +121,38 @@ CONNECT+ CRM - 2段階認証
                 server.login(smtp_username, smtp_password)
                 server.send_message(msg)
             
-            print(f"[2FA Email] ✓ Code sent to {user_email}")
+            success_msg = f"[2FA Email] ✓ Code sent to {user_email}"
+            print(success_msg)
+            import sys
+            sys.stdout.flush()  # ログが即座に出力されるように
             return True
         except smtplib.SMTPAuthenticationError as e:
-            print(f"[2FA Email] ❌ SMTP認証エラー: {e}")
+            error_msg = f"[2FA Email] ❌ SMTP認証エラー: {e}"
+            print(error_msg)
             print(f"[2FA Email] ユーザー名: {smtp_username}")
             print(f"[2FA Email] パスワード長: {len(smtp_password)}文字")
             print(f"[2FA Email] アプリパスワードが正しいか、2段階認証が有効か確認してください")
+            # 詳細なエラー情報も出力
+            import sys
+            import traceback
+            print(f"[2FA Email] エラー詳細:\n{traceback.format_exc()}")
+            sys.stderr.write(f"{error_msg}\n")
             raise
         except smtplib.SMTPException as e:
-            print(f"[2FA Email] ❌ SMTPエラー: {e}")
+            error_msg = f"[2FA Email] ❌ SMTPエラー: {e}"
+            print(error_msg)
+            import sys
+            import traceback
+            print(f"[2FA Email] エラー詳細:\n{traceback.format_exc()}")
+            sys.stderr.write(f"{error_msg}\n")
             raise
         except Exception as e:
-            print(f"[2FA Email] ❌ 予期しないエラー: {e}")
+            error_msg = f"[2FA Email] ❌ 予期しないエラー: {e}"
+            print(error_msg)
+            import sys
+            import traceback
+            print(f"[2FA Email] エラー詳細:\n{traceback.format_exc()}")
+            sys.stderr.write(f"{error_msg}\n")
             raise
         
     except Exception as e:
