@@ -20,12 +20,28 @@ CONNECT+ CRMアプリケーションを本番環境にデプロイする手順�
 DATABASE_URL=postgresql://username:password@host:5432/database_name
 SESSION_SECRET=your-very-secure-random-string-here
 PORT=5000  # プラットフォームによって自動設定される場合あり
+FLASK_DEBUG=False  # 本番環境では必ずFalseに設定
+
+# 2段階認証用メール送信設定（必須）
+SMTP_SERVER=smtp.gmail.com  # または他のSMTPサーバー
+SMTP_PORT=587
+SMTP_USERNAME=your-email@gmail.com
+SMTP_PASSWORD=your-app-password  # Gmailの場合はアプリパスワードを使用
+SMTP_FROM_EMAIL=your-email@gmail.com
+SMTP_FROM_NAME=CONNECT+ CRM
 ```
 
 **SESSION_SECRETの生成方法：**
 ```bash
 python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
+
+**Gmailでアプリパスワードを取得する方法（2段階認証用）：**
+1. Googleアカウントのセキュリティ設定にアクセス
+2. 2段階認証を有効化（まだの場合）
+3. 「アプリパスワード」を選択
+4. 「メール」と「その他（カスタム名）」を選択し、名前を入力（例：CONNECT+ CRM）
+5. 生成された16文字のパスワードを`SMTP_PASSWORD`に設定
 
 ---
 
@@ -62,6 +78,13 @@ heroku addons:create heroku-postgresql:mini
 4. **環境変数の設定**
 ```bash
 heroku config:set SESSION_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+heroku config:set FLASK_DEBUG=False
+heroku config:set SMTP_SERVER=smtp.gmail.com
+heroku config:set SMTP_PORT=587
+heroku config:set SMTP_USERNAME=your-email@gmail.com
+heroku config:set SMTP_PASSWORD=your-app-password
+heroku config:set SMTP_FROM_EMAIL=your-email@gmail.com
+heroku config:set SMTP_FROM_NAME="CONNECT+ CRM"
 ```
 
 5. **Procfileの作成**
@@ -188,7 +211,15 @@ railway run python migrate_db.py
    - 自動的に`DATABASE_URL`環境変数が設定されます
 
 5. **環境変数の設定**
-   - "Environment" タブで `SESSION_SECRET` を追加
+   - "Environment" タブで以下の環境変数を追加：
+     - `SESSION_SECRET`: ランダム文字列を生成
+     - `FLASK_DEBUG`: `False`
+     - `SMTP_SERVER`: `smtp.gmail.com`（Gmailの場合）
+     - `SMTP_PORT`: `587`
+     - `SMTP_USERNAME`: 送信元メールアドレス
+     - `SMTP_PASSWORD`: Gmailアプリパスワード
+     - `SMTP_FROM_EMAIL`: 送信元メールアドレス
+     - `SMTP_FROM_NAME`: `CONNECT+ CRM`
 
 6. **デプロイ**
    - "Create Web Service" をクリック
@@ -347,8 +378,9 @@ sudo certbot --nginx -d your-domain.com
 本番環境デプロイ前に確認：
 
 - [ ] `SESSION_SECRET`を強力なランダム文字列に変更
-- [ ] `debug=False`に設定（app.pyの最後の行）
+- [ ] `FLASK_DEBUG=False`に環境変数で設定
 - [ ] データベースパスワードを強力なものに変更
+- [ ] **2段階認証用のSMTP設定**を完了（`SMTP_SERVER`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`）
 - [ ] HTTPSを有効化（SSL証明書の設定）
 - [ ] ファイアウォールの設定（必要なポートのみ開放）
 - [ ] 定期的なバックアップの設定
@@ -483,6 +515,10 @@ sudo chown -R www-data:www-data /var/www/connectplus/static
 ---
 
 **デプロイに関する質問や問題があれば、お気軽にお尋ねください！**
+
+
+
+
 
 
 

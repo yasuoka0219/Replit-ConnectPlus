@@ -2314,6 +2314,7 @@ def settings_2fa():
 @login_required
 def setup_2fa():
     """Setup 2FA - enable email 2FA"""
+    import traceback
     try:
         data = request.get_json() or {}
         two_factor_type = 'email'  # Always use email-based 2FA
@@ -2340,6 +2341,14 @@ def setup_2fa():
         db.session.add(email_code)
         db.session.commit()
         
+        # Log code for debugging (only if SMTP not configured)
+        smtp_username = os.environ.get('SMTP_USERNAME', '')
+        smtp_password = os.environ.get('SMTP_PASSWORD', '')
+        
+        app.logger.info(f"[2FA Setup] User {user.email} (ID: {user.id}) initiated 2FA setup. Code ID: {email_code.id}")
+        if not smtp_username or not smtp_password:
+            app.logger.warning(f"[2FA Setup] SMTP設定がありません。認証コード: {code} (Code ID: {email_code.id})")
+        
         # Send email
         email_sent = send_2fa_email(user.email, code)
         
@@ -2348,8 +2357,6 @@ def setup_2fa():
             
             # Check if SMTP is configured for message
             message = '認証コードをメールで送信しました。メールに記載されている6桁のコードを入力してください。'
-            smtp_username = os.environ.get('SMTP_USERNAME', '')
-            smtp_password = os.environ.get('SMTP_PASSWORD', '')
             if not smtp_username or not smtp_password:
                 message += '（メールが届かない場合、サーバーのコンソールに認証コードが表示されています）'
             
@@ -2360,31 +2367,57 @@ def setup_2fa():
                 'code_id': email_code.id  # For verification
             })
         else:
-            db.session.delete(email_code)
-            db.session.commit()
-            return jsonify({'success': False, 'error': 'メールの送信に失敗しました。SMTP設定を確認してください。コンソールに認証コードが表示されている場合は、そのコードを使用してください。'}), 400
+            # Keep code in database even if email fails (user might check logs)
+            app.logger.error(f"[2FA Setup] メール送信に失敗しました。認証コード: {code} (Code ID: {email_code.id})")
+            return jsonify({
+                'success': False, 
+                'error': 'メールの送信に失敗しました。SMTP設定を確認してください。コンソールに認証コードが表示されている場合は、そのコードを使用してください。',
+                'code_id': email_code.id  # Return code_id even on failure
+            }), 400
     except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 400
+        error_traceback = traceback.format_exc()
+        app.logger.error(f"[2FA Setup] エラーが発生しました: {str(e)}\n{error_traceback}")
+        # Return user-friendly error message
+        error_message = '2FA設定中にエラーが発生しました。'
+        # Include more details in development mode
+        if app.config.get('DEBUG', False):
+            error_message += f' 詳細: {str(e)}'
+        return jsonify({'success': False, 'error': error_message}), 500
 
 
 @app.route('/api/2fa/verify', methods=['POST'])
 @login_required
 def verify_2fa():
     """Verify 2FA code and enable 2FA"""
+    import traceback
     try:
         data = request.get_json()
-        code = data.get('code')
+        if not data:
+            return jsonify({'success': False, 'error': 'リクエストデータが不正です'}), 400
+            
+        code = data.get('code', '').strip()
         code_id = data.get('code_id')  # For email-based 2FA
         
         if not code:
             return jsonify({'success': False, 'error': '認証コードが必要です'}), 400
         
         user = current_user
+        app.logger.info(f"[2FA Verify] User {user.email} (ID: {user.id}) attempting to verify code. Code ID: {code_id}")
         
         # Always use email-based 2FA verification
         if not code_id:
-            return jsonify({'success': False, 'error': 'コードIDが必要です'}), 400
+            # Try to find the latest code for this user
+            email_code = Email2FACode.query.filter_by(
+                user_id=user.id,
+                used=False
+            ).order_by(Email2FACode.created_at.desc()).first()
+            
+            if email_code:
+                code_id = email_code.id
+                app.logger.info(f"[2FA Verify] Code IDが見つかりませんでしたが、最新のコードを使用します: {code_id}")
+            else:
+                return jsonify({'success': False, 'error': 'コードIDが必要です。再度コードを送信してください。'}), 400
         
         email_code = Email2FACode.query.filter_by(
             id=code_id,
@@ -2392,8 +2425,13 @@ def verify_2fa():
             used=False
         ).first()
         
-        if not email_code or not email_code.is_valid():
-            return jsonify({'success': False, 'error': '認証コードが無効または期限切れです。再度コードを送信してください。'}), 400
+        if not email_code:
+            app.logger.warning(f"[2FA Verify] コードが見つかりません: Code ID {code_id} for user {user.id}")
+            return jsonify({'success': False, 'error': '認証コードが見つかりません。再度コードを送信してください。'}), 400
+        
+        if not email_code.is_valid():
+            app.logger.warning(f"[2FA Verify] コードが期限切れ: Code ID {code_id}, Expires: {email_code.expires_at}")
+            return jsonify({'success': False, 'error': '認証コードが期限切れです。再度コードを送信してください。'}), 400
         
         # Verify code
         if verify_email_code(user, code, email_code.code, email_code.expires_at):
@@ -2405,6 +2443,7 @@ def verify_2fa():
             user.two_factor_enabled = True
             db.session.commit()
             
+            app.logger.info(f"[2FA Verify] 2FA有効化成功: User {user.email} (ID: {user.id})")
             log_security_event('2fa_enabled', f'User {user.email} enabled email-based 2FA', user.id, ip_address=get_client_ip(), user_agent=get_user_agent())
             
             return jsonify({'success': True, 'message': '2FAが有効になりました'})
@@ -2413,13 +2452,23 @@ def verify_2fa():
             email_code.attempts += 1
             db.session.commit()
             
+            app.logger.warning(f"[2FA Verify] 認証コードが一致しません: Code ID {code_id}, Attempts: {email_code.attempts}")
+            
             if email_code.attempts >= 3:
                 return jsonify({'success': False, 'error': '認証コードの試行回数が上限に達しました。再度コードを送信してください。'}), 400
             else:
-                return jsonify({'success': False, 'error': '認証コードが正しくありません'}), 400
+                remaining = 3 - email_code.attempts
+                return jsonify({'success': False, 'error': f'認証コードが正しくありません。残り試行回数: {remaining}回'}), 400
     except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 400
+        error_traceback = traceback.format_exc()
+        app.logger.error(f"[2FA Verify] エラーが発生しました: {str(e)}\n{error_traceback}")
+        # Return user-friendly error message
+        error_message = '認証コードの確認中にエラーが発生しました。'
+        # Include more details in development mode
+        if app.config.get('DEBUG', False):
+            error_message += f' 詳細: {str(e)}'
+        return jsonify({'success': False, 'error': error_message}), 500
 
 
 @app.route('/api/2fa/send-email-code', methods=['POST'])

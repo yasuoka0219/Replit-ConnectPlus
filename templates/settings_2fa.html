@@ -150,7 +150,9 @@ function setup2FA() {
     })
     .then(response => {
         if (!response.ok) {
-            return response.json().then(err => { throw err; });
+            return response.json().then(err => { throw err; }).catch(() => {
+                throw { error: 'サーバーエラーが発生しました。ログを確認してください。' };
+            });
         }
         return response.json();
     })
@@ -180,7 +182,13 @@ function setup2FA() {
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('エラーが発生しました');
+        let errorMessage = 'エラーが発生しました';
+        if (error.error) {
+            errorMessage = error.error;
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+        alert('エラー: ' + errorMessage);
     });
 }
 
@@ -220,7 +228,9 @@ document.getElementById('verify2FAForm')?.addEventListener('submit', function(e)
     })
     .then(response => {
         if (!response.ok) {
-            return response.json().then(err => { throw err; });
+            return response.json().then(err => { throw err; }).catch(() => {
+                throw { error: 'サーバーエラーが発生しました。ログを確認してください。' };
+            });
         }
         return response.json();
     })
@@ -234,7 +244,19 @@ document.getElementById('verify2FAForm')?.addEventListener('submit', function(e)
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('エラーが発生しました: ' + (error.error || error.message || '予期しないエラー'));
+        let errorMessage = 'エラーが発生しました';
+        try {
+            if (error.error) {
+                errorMessage = error.error;
+            } else if (error.message) {
+                errorMessage = error.message;
+            } else if (typeof error === 'string') {
+                errorMessage = error;
+            }
+        } catch (e) {
+            console.error('Error parsing error message:', e);
+        }
+        alert('エラー: ' + errorMessage);
     });
 });
 
@@ -276,7 +298,9 @@ function resendSetupEmailCode() {
     })
     .then(response => {
         if (!response.ok) {
-            return response.json().then(err => { throw err; });
+            return response.json().then(err => { throw err; }).catch(() => {
+                throw { error: 'サーバーエラーが発生しました。ログを確認してください。' };
+            });
         }
         return response.json();
     })
@@ -298,7 +322,19 @@ function resendSetupEmailCode() {
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('エラーが発生しました: ' + (error.error || error.message || '予期しないエラー'));
+        let errorMessage = 'エラーが発生しました';
+        try {
+            if (error.error) {
+                errorMessage = error.error;
+            } else if (error.message) {
+                errorMessage = error.message;
+            } else if (typeof error === 'string') {
+                errorMessage = error;
+            }
+        } catch (e) {
+            console.error('Error parsing error message:', e);
+        }
+        alert('エラー: ' + errorMessage);
     });
 }
 </script>
