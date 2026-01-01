@@ -542,9 +542,47 @@ def login():
                             session.pop('login_code_id', None)
                             return render_template('login.html', two_factor_required=True, two_factor_type='email', email=email)
                     else:
-                        flash('認証コードが見つかりません。再度コードを送信してください。', 'error')
-                        session.pop('login_email', None)
-                        return render_template('login.html', two_factor_required=True, two_factor_type='email', email=email)
+                        # Code ID not in session, try to find latest code
+                        email_code = Email2FACode.query.filter_by(
+                            user_id=user.id,
+                            used=False
+                        ).order_by(Email2FACode.created_at.desc()).first()
+                        
+                        if email_code and email_code.is_valid():
+                            # Use latest code
+                            code_id = email_code.id
+                            session['login_code_id'] = code_id
+                            app.logger.info(f"[Login 2FA] Code IDが見つかりませんでしたが、最新のコードを使用します: {code_id}")
+                            # Retry verification with found code
+                            if verify_email_code(user, two_factor_code, email_code.code, email_code.expires_at):
+                                # Mark code as used
+                                email_code.used = True
+                                db.session.commit()
+                                session.pop('login_email', None)
+                                session.pop('login_code_id', None)
+                                
+                                # Successful login
+                                login_user(user)
+                                user.reset_failed_attempts()
+                                user.unlock_account()
+                                db.session.commit()
+                                
+                                log_login_attempt(email, True, user.id, ip_address=get_client_ip(), user_agent=get_user_agent())
+                                log_security_event('login', f'User {user.email} logged in', user.id, ip_address=get_client_ip(), user_agent=get_user_agent())
+                                
+                                flash('ログインに成功しました！', 'success')
+                                next_page = request.args.get('next')
+                                return redirect(next_page if next_page else url_for('dashboard'))
+                            else:
+                                email_code.attempts += 1
+                                db.session.commit()
+                                flash('認証コードが正しくありません。', 'error')
+                                log_login_attempt(email, False, user.id, ip_address=get_client_ip(), user_agent=get_user_agent())
+                                return render_template('login.html', two_factor_required=True, two_factor_type='email', email=email)
+                        else:
+                            flash('認証コードが見つかりません。再度コードを送信してください。', 'error')
+                            session.pop('login_email', None)
+                            return render_template('login.html', two_factor_required=True, two_factor_type='email', email=email)
                 else:
                     # 2FA required but code not provided - stay on 2FA page
                     return render_template('login.html', two_factor_required=True, two_factor_type='email', email=email)
@@ -593,8 +631,18 @@ def login():
                 db.session.add(email_code)
                 db.session.commit()
                 
-                # Send email
-                send_2fa_email(user.email, code)
+                # Send email (catch errors to prevent Internal Server Error)
+                try:
+                    email_sent = send_2fa_email(user.email, code)
+                    if not email_sent:
+                        app.logger.warning(f"[Login 2FA] メール送信に失敗しましたが、ログから認証コードを確認できます。認証コード: {code} (Code ID: {email_code.id})")
+                except Exception as email_error:
+                    import traceback
+                    app.logger.error(f"[Login 2FA] メール送信でエラーが発生: {email_error}")
+                    app.logger.error(f"[Login 2FA] 例外の詳細:\n{traceback.format_exc()}")
+                    app.logger.warning(f"[Login 2FA] 認証コード（ログから確認）: {code} (Code ID: {email_code.id})")
+                    # メール送信エラーでも続行（ログから認証コードを確認できる）
+                
                 session['login_code_id'] = email_code.id
                 
                 flash('認証コードをメールで送信しました。メールに記載されている6桁のコードを入力してください。メールが届かない場合は、コンソールに認証コードが表示されています。', 'info')
