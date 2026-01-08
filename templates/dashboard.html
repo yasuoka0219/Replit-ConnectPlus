@@ -432,7 +432,7 @@
                 tbody.innerHTML = sorted.map(item => `
                     <tr class="border-b border-gray-100 dark:border-gray-700">
                         <td class="px-3 py-2 text-gray-900 dark:text-white">${item.lead_source || '未設定'}</td>
-                        <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-300">${((item.win_rate || 0) * 100).toFixed(1)}%</td>
+                        <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-300">${(item.win_rate || 0).toFixed(1)}%</td>
                         <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-300">${formatCurrency(item.avg_amount || 0)}</td>
                     </tr>
                 `).join('');
@@ -460,7 +460,7 @@
                 tbody.innerHTML = sorted.map(item => `
                     <tr class="border-b border-gray-100 dark:border-gray-700">
                         <td class="px-3 py-2 text-gray-900 dark:text-white">${item.industry || '未設定'}</td>
-                        <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-300">${((item.win_rate || 0) * 100).toFixed(1)}%</td>
+                        <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-300">${(item.win_rate || 0).toFixed(1)}%</td>
                         <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-300">${formatCurrency(item.revenue || 0)}</td>
                     </tr>
                 `).join('');
@@ -489,7 +489,7 @@
                 
                 const labels = data.map(d => d.month_label || d.month);
                 const revenues = data.map(d => d.revenue || 0);
-                const winRates = data.map(d => (d.win_rate || 0) * 100);
+                const winRates = data.map(d => d.win_rate || 0);
                 
                 if (dashboardTrendChartInstance) {
                     dashboardTrendChartInstance.destroy();

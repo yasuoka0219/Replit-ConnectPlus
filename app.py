@@ -5556,32 +5556,62 @@ def api_analytics_kpi_summary():
     
     start_date, end_date = get_cross_tab_date_range()
     
-    # Revenue (won in period by won_date)
+    # Revenue (won in period by won_date, fallback to closed_at if NULL)
     revenue = db.session.query(db.func.coalesce(db.func.sum(Deal.amount), 0)).filter(
         Deal.status == 'WON',
-        Deal.won_date >= start_date,
-        Deal.won_date <= end_date
+        db.or_(
+            db.and_(Deal.won_date >= start_date, Deal.won_date <= end_date),
+            db.and_(
+                Deal.won_date.is_(None),
+                Deal.closed_at.isnot(None),
+                db.func.date(Deal.closed_at) >= start_date,
+                db.func.date(Deal.closed_at) <= end_date
+            )
+        )
     ).scalar() or 0
     
     # New deals (new_or_existing = 新規 and WON)
     new_won_count = db.session.query(db.func.count(Deal.id)).filter(
         Deal.new_or_existing == '新規',
         Deal.status == 'WON',
-        Deal.won_date >= start_date,
-        Deal.won_date <= end_date
+        db.or_(
+            db.and_(Deal.won_date >= start_date, Deal.won_date <= end_date),
+            db.and_(
+                Deal.won_date.is_(None),
+                Deal.closed_at.isnot(None),
+                db.func.date(Deal.closed_at) >= start_date,
+                db.func.date(Deal.closed_at) <= end_date
+            )
+        )
     ).scalar() or 0
     
-    # Win rate (closed deals in period using won_date/lost_date)
+    # Win rate (closed deals in period using won_date/lost_date, fallback to closed_at if NULL)
+    # For WON deals: use won_date if available, otherwise closed_at
     won_in_period = db.session.query(db.func.count(Deal.id)).filter(
         Deal.status == 'WON',
-        Deal.won_date >= start_date,
-        Deal.won_date <= end_date
+        db.or_(
+            db.and_(Deal.won_date >= start_date, Deal.won_date <= end_date),
+            db.and_(
+                Deal.won_date.is_(None),
+                Deal.closed_at.isnot(None),
+                db.func.date(Deal.closed_at) >= start_date,
+                db.func.date(Deal.closed_at) <= end_date
+            )
+        )
     ).scalar() or 0
     
+    # For LOST deals: use lost_date if available, otherwise closed_at
     lost_in_period = db.session.query(db.func.count(Deal.id)).filter(
         Deal.status == 'LOST',
-        Deal.lost_date >= start_date,
-        Deal.lost_date <= end_date
+        db.or_(
+            db.and_(Deal.lost_date >= start_date, Deal.lost_date <= end_date),
+            db.and_(
+                Deal.lost_date.is_(None),
+                Deal.closed_at.isnot(None),
+                db.func.date(Deal.closed_at) >= start_date,
+                db.func.date(Deal.closed_at) <= end_date
+            )
+        )
     ).scalar() or 0
     
     total_closed = won_in_period + lost_in_period
@@ -5595,7 +5625,7 @@ def api_analytics_kpi_summary():
     
     return jsonify({
         'revenue': float(revenue),
-        'new_won_count': new_won_count,
+        'new_wins': new_won_count,
         'win_rate': win_rate,
         'new_leads': new_leads,
         'period': {'start': str(start_date), 'end': str(end_date)}
