@@ -2745,6 +2745,8 @@ def setup_2fa():
             app.logger.warning(f"[2FA Setup] SMTP設定がありません。認証コード: {code} (Code ID: {email_code.id})")
         
         # Send email
+        email_sent = False
+        email_error_message = None
         try:
             email_sent = send_2fa_email(user.email, code)
         except Exception as email_error:
@@ -2752,42 +2754,52 @@ def setup_2fa():
             error_traceback = traceback.format_exc()
             app.logger.error(f"[2FA Setup] メール送信で例外が発生: {email_error}")
             app.logger.error(f"[2FA Setup] 例外の詳細:\n{error_traceback}")
+            email_error_message = str(email_error)
             # エラーが発生しても、認証コードはデータベースに保存されているので、ログに表示
             app.logger.warning(f"[2FA Setup] 認証コード（ログから確認）: {code} (Code ID: {email_code.id})")
-            # エラーを再発生させて、外側のハンドラーで処理
-            raise
+            # エラーをログに記録するが、処理は続行（認証コードは返す）
         
+        # 認証コードは常に返す（メール送信に失敗しても、ログから確認できる）
+        log_security_event('2fa_setup_initiated', f'User {user.email} initiated email 2FA setup', user.id, ip_address=get_client_ip(), user_agent=get_user_agent())
+        
+        # Check if SMTP is configured for message
         if email_sent:
-            log_security_event('2fa_setup_initiated', f'User {user.email} initiated email 2FA setup', user.id, ip_address=get_client_ip(), user_agent=get_user_agent())
-            
-            # Check if SMTP is configured for message
             message = '認証コードをメールで送信しました。メールに記載されている6桁のコードを入力してください。'
-            if not smtp_username or not smtp_password:
-                message += '（メールが届かない場合、サーバーのコンソールに認証コードが表示されています）'
-            
-            return jsonify({
-                'success': True,
-                'type': 'email',
-                'message': message,
-                'code_id': email_code.id  # For verification
-            })
         else:
-            # Keep code in database even if email fails (user might check logs)
-            app.logger.error(f"[2FA Setup] メール送信に失敗しました。認証コード: {code} (Code ID: {email_code.id})")
-            return jsonify({
-                'success': False, 
-                'error': 'メールの送信に失敗しました。SMTP設定を確認してください。コンソールに認証コードが表示されている場合は、そのコードを使用してください。',
-                'code_id': email_code.id  # Return code_id even on failure
-            }), 400
+            # SMTP設定がない、またはメール送信に失敗した場合
+            if not smtp_username or not smtp_password:
+                message = 'SMTP設定がありません。サーバーのログに認証コードが表示されています。ログを確認して認証コードを入力してください。'
+            else:
+                message = f'メールの送信に失敗しました（{email_error_message or "SMTPエラー"}）。サーバーのログに認証コードが表示されています。ログを確認して認証コードを入力してください。'
+        
+        return jsonify({
+            'success': True,
+            'type': 'email',
+            'message': message,
+            'code_id': email_code.id,  # For verification
+            'email_sent': email_sent  # メール送信の成功/失敗を返す
+        })
     except Exception as e:
         db.session.rollback()
         error_traceback = traceback.format_exc()
         app.logger.error(f"[2FA Setup] エラーが発生しました: {str(e)}\n{error_traceback}")
-        # Return user-friendly error message
+        
+        # データベースエラーの場合、より詳細なメッセージを返す
         error_message = '2FA設定中にエラーが発生しました。'
-        # Include more details in development mode
-        if app.config.get('DEBUG', False):
-            error_message += f' 詳細: {str(e)}'
+        
+        # データベーステーブルが存在しない場合のエラー
+        if 'no such table' in str(e).lower() or 'relation' in str(e).lower() and 'does not exist' in str(e).lower():
+            error_message = 'データベースのマイグレーションが必要です。Email2FACodeテーブルが存在しません。管理者に連絡してください。'
+        # その他のエラー
+        else:
+            # 本番環境でもエラーの種類を表示（セキュリティ上問題ない範囲）
+            if 'operationalerror' in str(e).lower() or 'database' in str(e).lower():
+                error_message = 'データベースエラーが発生しました。データベースの接続を確認してください。'
+            elif 'smtp' in str(e).lower() or 'email' in str(e).lower():
+                error_message = 'メール送信エラーが発生しました。SMTP設定を確認してください。'
+            else:
+                error_message = f'2FA設定中にエラーが発生しました: {str(e)[:100]}'  # 最初の100文字のみ表示
+        
         return jsonify({'success': False, 'error': error_message}), 500
 
 
