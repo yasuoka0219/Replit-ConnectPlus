@@ -59,6 +59,7 @@ from utils.password_reset import (
     generate_reset_token, send_password_reset_email,
     RESET_TOKEN_EXPIRY_HOURS
 )
+from utils.email_sender import send_email
 
 load_dotenv()
 
@@ -4085,6 +4086,68 @@ def update_contact_api(contact_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/contacts/<int:contact_id>/send-email', methods=['POST'])
+@login_required
+def send_contact_email(contact_id):
+    """連絡先にメールを送信"""
+    try:
+        contact = Contact.query.get_or_404(contact_id)
+        
+        if not contact.email:
+            return jsonify({'success': False, 'error': '連絡先にメールアドレスが登録されていません'}), 400
+        
+        data = request.get_json()
+        subject = data.get('subject', '')
+        body = data.get('body', '')
+        
+        if not subject or not body:
+            return jsonify({'success': False, 'error': '件名と本文を入力してください'}), 400
+        
+        # HTML本文を作成
+        html_body = f"""
+        <html>
+          <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+              <h2 style="color: #4F46E5;">{subject}</h2>
+              <div style="white-space: pre-wrap;">{body}</div>
+              <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;">
+              <p style="color: #999; font-size: 12px;">
+                このメールは CONNECT+ CRM から送信されました。
+              </p>
+            </div>
+          </body>
+        </html>
+        """
+        
+        # メール送信
+        success = send_email(contact.email, subject, html_body, body)
+        
+        if success:
+            # 活動履歴に記録
+            activity = Activity(
+                company_id=contact.company_id,
+                user_id=current_user.id,
+                type='email',
+                title=f'メール送信: {subject}',
+                body=body,
+                happened_at=datetime.utcnow()
+            )
+            db.session.add(activity)
+            db.session.commit()
+            
+            log_security_event('email_sent', f'メール送信: {contact.name} ({contact.email})', current_user.id, 
+                             ip_address=get_client_ip(), user_agent=get_user_agent())
+            
+            return jsonify({'success': True, 'message': 'メールを送信しました'})
+        else:
+            return jsonify({'success': False, 'error': 'メールの送信に失敗しました。SMTP設定を確認してください。'}), 500
+            
+    except Exception as e:
+        app.logger.error(f"メール送信エラー: {e}")
+        import traceback
+        app.logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': f'エラーが発生しました: {str(e)}'}), 500
 
 @app.route('/api/contacts/<int:contact_id>', methods=['DELETE'])
 @login_required
