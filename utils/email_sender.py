@@ -61,11 +61,22 @@ def send_email(to_email, subject, html_body, text_body=None):
         msg.attach(part2)
         
         # SMTPサーバーに接続してメール送信
-        with smtplib.SMTP(smtp_server, smtp_port, timeout=30) as server:
-            server.set_debuglevel(0)  # デバッグ情報を非表示（必要に応じて1に変更）
-            server.starttls()
-            server.login(smtp_username, smtp_password)
-            server.send_message(msg)
+        # Port 465 uses SSL, port 587 uses STARTTLS
+        if smtp_port == 465:
+            # Use SMTP_SSL for port 465
+            import ssl
+            context = ssl.create_default_context()
+            with smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=30, context=context) as server:
+                server.set_debuglevel(0)  # デバッグ情報を非表示（必要に応じて1に変更）
+                server.login(smtp_username, smtp_password)
+                server.send_message(msg)
+        else:
+            # Use SMTP with STARTTLS for port 587
+            with smtplib.SMTP(smtp_server, smtp_port, timeout=30) as server:
+                server.set_debuglevel(0)  # デバッグ情報を非表示（必要に応じて1に変更）
+                server.starttls()
+                server.login(smtp_username, smtp_password)
+                server.send_message(msg)
         
         print(f"[Email] ✓ メール送信成功: {to_email}")
         import sys
