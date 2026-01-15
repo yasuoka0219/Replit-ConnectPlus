@@ -118,11 +118,22 @@ CONNECT+ CRM - 2段階認証
         
         # Send email
         try:
-            with smtplib.SMTP(smtp_server, smtp_port, timeout=30) as server:
-                server.set_debuglevel(0)  # Set to 1 for debug output
-                server.starttls()
-                server.login(smtp_username, smtp_password)
-                server.send_message(msg)
+            # Port 465 uses SSL, port 587 uses STARTTLS
+            if smtp_port == 465:
+                # Use SMTP_SSL for port 465
+                import ssl
+                context = ssl.create_default_context()
+                with smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=30, context=context) as server:
+                    server.set_debuglevel(0)  # Set to 1 for debug output
+                    server.login(smtp_username, smtp_password)
+                    server.send_message(msg)
+            else:
+                # Use SMTP with STARTTLS for port 587
+                with smtplib.SMTP(smtp_server, smtp_port, timeout=30) as server:
+                    server.set_debuglevel(0)  # Set to 1 for debug output
+                    server.starttls()
+                    server.login(smtp_username, smtp_password)
+                    server.send_message(msg)
             
             success_msg = f"[2FA Email] ✓ Code sent to {user_email}"
             print(success_msg)
