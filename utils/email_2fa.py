@@ -117,76 +117,78 @@ CONNECT+ CRM - 2段階認証
         msg.attach(part2)
         
         # Send email with retry and fallback logic
-        import time
-        import ssl
-        import socket
-        
-        # Try both ports if one fails (587 first, then 465)
-        ports_to_try = [smtp_port]
-        if smtp_port == 587:
-            ports_to_try.append(465)
-        elif smtp_port == 465:
-            ports_to_try.append(587)
-        
-        last_error = None
-        max_retries = 3
-        
-        for attempt in range(max_retries):
-            for port in ports_to_try:
-                try:
-                    print(f"[2FA Email] 試行 {attempt + 1}/{max_retries}: ポート {port} で接続中...")
-                    
-                    # Port 465 uses SSL, port 587 uses STARTTLS
-                    if port == 465:
-                        # Use SMTP_SSL for port 465
-                        context = ssl.create_default_context()
-                        with smtplib.SMTP_SSL(smtp_server, port, timeout=60, context=context) as server:
-                            server.set_debuglevel(0)  # Set to 1 for debug output
-                            server.login(smtp_username, smtp_password)
-                            server.send_message(msg)
-                    else:
-                        # Use SMTP with STARTTLS for port 587
-                        with smtplib.SMTP(smtp_server, port, timeout=60) as server:
-                            server.set_debuglevel(0)  # Set to 1 for debug output
-                            server.starttls()
-                            server.login(smtp_username, smtp_password)
-                            server.send_message(msg)
-                    
-                    success_msg = f"[2FA Email] ✓ Code sent to {user_email} (ポート {port})"
-                    print(success_msg)
-                    import sys
-                    sys.stdout.flush()  # ログが即座に出力されるように
-                    return True
-                    
-                except (socket.error, OSError) as e:
-                    # Network errors - try next port or retry
-                    last_error = e
-                    error_msg = f"[2FA Email] ポート {port} で接続エラー: {e}"
-                    print(error_msg)
-                    if port == ports_to_try[-1] and attempt < max_retries - 1:
-                        # Last port and not last attempt - wait before retry
-                        wait_time = (attempt + 1) * 2  # 2, 4, 6 seconds
-                        print(f"[2FA Email] {wait_time}秒待機してから再試行します...")
-                        time.sleep(wait_time)
-                    continue
-                    
-                except smtplib.SMTPAuthenticationError as e:
-                    # Authentication error - don't retry
-                    raise
-                    
-                except smtplib.SMTPException as e:
-                    # SMTP error - try next port or retry
-                    last_error = e
-                    error_msg = f"[2FA Email] ポート {port} でSMTPエラー: {e}"
-                    print(error_msg)
-                    if port == ports_to_try[-1] and attempt < max_retries - 1:
-                        wait_time = (attempt + 1) * 2
-                        print(f"[2FA Email] {wait_time}秒待機してから再試行します...")
-                        time.sleep(wait_time)
-                    continue
-        
-        # All attempts failed
-        raise Exception(f"すべての試行が失敗しました。最後のエラー: {last_error}")
+        try:
+            import time
+            import ssl
+            import socket
+            
+            # Try both ports if one fails (587 first, then 465)
+            ports_to_try = [smtp_port]
+            if smtp_port == 587:
+                ports_to_try.append(465)
+            elif smtp_port == 465:
+                ports_to_try.append(587)
+            
+            last_error = None
+            max_retries = 3
+            
+            for attempt in range(max_retries):
+                for port in ports_to_try:
+                    try:
+                        print(f"[2FA Email] 試行 {attempt + 1}/{max_retries}: ポート {port} で接続中...")
+                        
+                        # Port 465 uses SSL, port 587 uses STARTTLS
+                        if port == 465:
+                            # Use SMTP_SSL for port 465
+                            context = ssl.create_default_context()
+                            with smtplib.SMTP_SSL(smtp_server, port, timeout=60, context=context) as server:
+                                server.set_debuglevel(0)  # Set to 1 for debug output
+                                server.login(smtp_username, smtp_password)
+                                server.send_message(msg)
+                        else:
+                            # Use SMTP with STARTTLS for port 587
+                            with smtplib.SMTP(smtp_server, port, timeout=60) as server:
+                                server.set_debuglevel(0)  # Set to 1 for debug output
+                                server.starttls()
+                                server.login(smtp_username, smtp_password)
+                                server.send_message(msg)
+                        
+                        success_msg = f"[2FA Email] ✓ Code sent to {user_email} (ポート {port})"
+                        print(success_msg)
+                        import sys
+                        sys.stdout.flush()  # ログが即座に出力されるように
+                        return True
+                        
+                    except (socket.error, OSError) as e:
+                        # Network errors - try next port or retry
+                        last_error = e
+                        error_msg = f"[2FA Email] ポート {port} で接続エラー: {e}"
+                        print(error_msg)
+                        if port == ports_to_try[-1] and attempt < max_retries - 1:
+                            # Last port and not last attempt - wait before retry
+                            wait_time = (attempt + 1) * 2  # 2, 4, 6 seconds
+                            print(f"[2FA Email] {wait_time}秒待機してから再試行します...")
+                            time.sleep(wait_time)
+                        continue
+                        
+                    except smtplib.SMTPAuthenticationError as e:
+                        # Authentication error - don't retry
+                        raise
+                        
+                    except smtplib.SMTPException as e:
+                        # SMTP error - try next port or retry
+                        last_error = e
+                        error_msg = f"[2FA Email] ポート {port} でSMTPエラー: {e}"
+                        print(error_msg)
+                        if port == ports_to_try[-1] and attempt < max_retries - 1:
+                            wait_time = (attempt + 1) * 2
+                            print(f"[2FA Email] {wait_time}秒待機してから再試行します...")
+                            time.sleep(wait_time)
+                        continue
+            
+            # All attempts failed
+            raise Exception(f"すべての試行が失敗しました。最後のエラー: {last_error}")
+            
         except smtplib.SMTPAuthenticationError as e:
             error_msg = f"[2FA Email] ❌ SMTP認証エラー: {e}"
             print(error_msg)
