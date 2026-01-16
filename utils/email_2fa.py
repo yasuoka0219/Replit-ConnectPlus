@@ -187,9 +187,14 @@ CONNECT+ CRM - 2段階認証
                         continue
             
             # All attempts failed
-            raise Exception(f"すべての試行が失敗しました。最後のエラー: {last_error}")
+            error_msg = f"[2FA Email] ❌ すべての試行が失敗しました。最後のエラー: {last_error}"
+            print(error_msg)
+            import sys
+            sys.stdout.flush()
+            return False
             
         except smtplib.SMTPAuthenticationError as e:
+            # Authentication error - log but don't raise (allow user to see code in logs)
             error_msg = f"[2FA Email] ❌ SMTP認証エラー: {e}"
             print(error_msg)
             print(f"[2FA Email] ユーザー名: {smtp_username}")
@@ -199,24 +204,41 @@ CONNECT+ CRM - 2段階認証
             import sys
             import traceback
             print(f"[2FA Email] エラー詳細:\n{traceback.format_exc()}")
-            sys.stderr.write(f"{error_msg}\n")
-            raise
+            print(f"[2FA Email] =========================================")
+            print(f"[2FA Email] ⚠️ メール送信に失敗しましたが、認証コードはログに表示されています")
+            print(f"[2FA Email] 認証コード: {code}")
+            print(f"[2FA Email] メールアドレス: {user_email}")
+            print(f"[2FA Email] =========================================")
+            sys.stdout.flush()
+            return False  # Don't raise - return False instead
         except smtplib.SMTPException as e:
+            # SMTP error - log but don't raise
             error_msg = f"[2FA Email] ❌ SMTPエラー: {e}"
             print(error_msg)
             import sys
             import traceback
             print(f"[2FA Email] エラー詳細:\n{traceback.format_exc()}")
-            sys.stderr.write(f"{error_msg}\n")
-            raise
+            print(f"[2FA Email] =========================================")
+            print(f"[2FA Email] ⚠️ メール送信に失敗しましたが、認証コードはログに表示されています")
+            print(f"[2FA Email] 認証コード: {code}")
+            print(f"[2FA Email] メールアドレス: {user_email}")
+            print(f"[2FA Email] =========================================")
+            sys.stdout.flush()
+            return False  # Don't raise - return False instead
         except Exception as e:
+            # Unexpected error - log but don't raise
             error_msg = f"[2FA Email] ❌ 予期しないエラー: {e}"
             print(error_msg)
             import sys
             import traceback
             print(f"[2FA Email] エラー詳細:\n{traceback.format_exc()}")
-            sys.stderr.write(f"{error_msg}\n")
-            raise
+            print(f"[2FA Email] =========================================")
+            print(f"[2FA Email] ⚠️ メール送信に失敗しましたが、認証コードはログに表示されています")
+            print(f"[2FA Email] 認証コード: {code}")
+            print(f"[2FA Email] メールアドレス: {user_email}")
+            print(f"[2FA Email] =========================================")
+            sys.stdout.flush()
+            return False  # Don't raise - return False instead
         
     except Exception as e:
         import traceback
