@@ -130,7 +130,8 @@ CONNECT+ CRM - 2段階認証
                 ports_to_try.append(587)
             
             last_error = None
-            max_retries = 3
+            max_retries = 2  # リトライ回数を減らす（タイムアウトを避けるため）
+            connection_timeout = 10  # タイムアウトを10秒に短縮（Railwayの制限を考慮）
             
             for attempt in range(max_retries):
                 for port in ports_to_try:
@@ -141,13 +142,13 @@ CONNECT+ CRM - 2段階認証
                         if port == 465:
                             # Use SMTP_SSL for port 465
                             context = ssl.create_default_context()
-                            with smtplib.SMTP_SSL(smtp_server, port, timeout=60, context=context) as server:
+                            with smtplib.SMTP_SSL(smtp_server, port, timeout=connection_timeout, context=context) as server:
                                 server.set_debuglevel(0)  # Set to 1 for debug output
                                 server.login(smtp_username, smtp_password)
                                 server.send_message(msg)
                         else:
                             # Use SMTP with STARTTLS for port 587
-                            with smtplib.SMTP(smtp_server, port, timeout=60) as server:
+                            with smtplib.SMTP(smtp_server, port, timeout=connection_timeout) as server:
                                 server.set_debuglevel(0)  # Set to 1 for debug output
                                 server.starttls()
                                 server.login(smtp_username, smtp_password)

@@ -73,7 +73,8 @@ def send_email(to_email, subject, html_body, text_body=None):
             ports_to_try.append(587)
         
         last_error = None
-        max_retries = 3
+        max_retries = 2  # リトライ回数を減らす（タイムアウトを避けるため）
+        connection_timeout = 10  # タイムアウトを10秒に短縮（Railwayの制限を考慮）
         
         for attempt in range(max_retries):
             for port in ports_to_try:
@@ -84,13 +85,13 @@ def send_email(to_email, subject, html_body, text_body=None):
                     if port == 465:
                         # Use SMTP_SSL for port 465
                         context = ssl.create_default_context()
-                        with smtplib.SMTP_SSL(smtp_server, port, timeout=60, context=context) as server:
+                        with smtplib.SMTP_SSL(smtp_server, port, timeout=connection_timeout, context=context) as server:
                             server.set_debuglevel(0)  # デバッグ情報を非表示（必要に応じて1に変更）
                             server.login(smtp_username, smtp_password)
                             server.send_message(msg)
                     else:
                         # Use SMTP with STARTTLS for port 587
-                        with smtplib.SMTP(smtp_server, port, timeout=60) as server:
+                        with smtplib.SMTP(smtp_server, port, timeout=connection_timeout) as server:
                             server.set_debuglevel(0)  # デバッグ情報を非表示（必要に応じて1に変更）
                             server.starttls()
                             server.login(smtp_username, smtp_password)
