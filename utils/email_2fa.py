@@ -54,6 +54,82 @@ def send_2fa_email(user_email, code):
         smtp_from_email = os.environ.get('SMTP_FROM_EMAIL', smtp_username)
         smtp_from_name = os.environ.get('SMTP_FROM_NAME', 'CONNECT+ CRM')
         
+        # Try SendGrid API first (more reliable than SMTP)
+        sendgrid_api_key = os.environ.get('SENDGRID_API_KEY', smtp_password)
+        if sendgrid_api_key and sendgrid_api_key.startswith('SG.'):
+            try:
+                from sendgrid import SendGridAPIClient
+                from sendgrid.helpers.mail import Mail
+                
+                print(f"[2FA Email] SendGrid APIを使用してメール送信を試行中...")
+                
+                # Create HTML email body
+                html_body = f"""
+                <html>
+                  <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                    <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                      <h2 style="color: #4F46E5;">CONNECT+ CRM - 2段階認証</h2>
+                      <p>ログイン用の認証コードをお送りします。</p>
+                      <div style="background-color: #F3F4F6; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
+                        <h1 style="font-size: 32px; letter-spacing: 8px; color: #4F46E5; margin: 0;">{code}</h1>
+                      </div>
+                      <p style="color: #666; font-size: 14px;">
+                        このコードは10分間有効です。<br>
+                        このメールに心当たりがない場合は、無視してください。
+                      </p>
+                      <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;">
+                      <p style="color: #999; font-size: 12px;">
+                        このメールは CONNECT+ CRM から自動送信されています。
+                      </p>
+                    </div>
+                  </body>
+                </html>
+                """
+                
+                # Plain text version
+                text_body = f"""
+CONNECT+ CRM - 2段階認証
+
+ログイン用の認証コードをお送りします。
+
+認証コード: {code}
+
+このコードは10分間有効です。
+このメールに心当たりがない場合は、無視してください。
+
+---
+このメールは CONNECT+ CRM から自動送信されています。
+                """
+                
+                message = Mail(
+                    from_email=(smtp_from_email, smtp_from_name),
+                    to_emails=user_email,
+                    subject='CONNECT+ CRM - 2段階認証コード',
+                    html_content=html_body,
+                    plain_text_content=text_body
+                )
+                
+                sg = SendGridAPIClient(sendgrid_api_key)
+                response = sg.send(message)
+                
+                if response.status_code == 202:
+                    print(f"[2FA Email] ✓ Code sent to {user_email} via SendGrid API")
+                    import sys
+                    sys.stdout.flush()
+                    return True
+                else:
+                    print(f"[2FA Email] SendGrid API エラー: Status {response.status_code}")
+                    import sys
+                    sys.stdout.flush()
+                    # Fall through to SMTP
+            except ImportError:
+                print(f"[2FA Email] SendGrid SDKがインストールされていません。SMTPを使用します。")
+            except Exception as e:
+                print(f"[2FA Email] SendGrid API エラー: {e}")
+                import sys
+                sys.stdout.flush()
+                # Fall through to SMTP
+        
         # If no SMTP credentials configured, use a mock/test mode
         if not smtp_username or not smtp_password:
             print(f"[2FA Email] ⚠️ SMTP設定がありません。開発モードで動作しています。")
@@ -66,6 +142,7 @@ def send_2fa_email(user_email, code):
             # 開発モードでもTrueを返す（エラーを防ぐため）
             return True  # Return True in development/test mode
         
+        # Fallback to SMTP (if SendGrid API failed or not available)
         # Create email message
         msg = MIMEMultipart('alternative')
         msg['Subject'] = 'CONNECT+ CRM - 2段階認証コード'
@@ -116,83 +193,92 @@ CONNECT+ CRM - 2段階認証
         msg.attach(part1)
         msg.attach(part2)
         
-        # Send email with retry and fallback logic
+        # Send email with SMTP (fallback)
         try:
             import time
             import ssl
             import socket
             
-            # Try both ports if one fails (587 first, then 465)
-            ports_to_try = [smtp_port]
-            if smtp_port == 587:
-                ports_to_try.append(465)
-            elif smtp_port == 465:
-                ports_to_try.append(587)
+            # タイムアウトを5秒に短縮し、リトライを削減（Gunicornワーカータイムアウトを避けるため）
+            connection_timeout = 5  # タイムアウトを5秒に短縮（Railwayの制限を考慮）
             
+            # 最初のポートのみ試行（フォールバックを削除してタイムアウトを避ける）
+            port = smtp_port
             last_error = None
-            max_retries = 2  # リトライ回数を減らす（タイムアウトを避けるため）
-            connection_timeout = 10  # タイムアウトを10秒に短縮（Railwayの制限を考慮）
             
-            for attempt in range(max_retries):
-                for port in ports_to_try:
-                    try:
-                        print(f"[2FA Email] 試行 {attempt + 1}/{max_retries}: ポート {port} で接続中...")
-                        
-                        # Port 465 uses SSL, port 587 uses STARTTLS
-                        if port == 465:
-                            # Use SMTP_SSL for port 465
-                            context = ssl.create_default_context()
-                            with smtplib.SMTP_SSL(smtp_server, port, timeout=connection_timeout, context=context) as server:
-                                server.set_debuglevel(0)  # Set to 1 for debug output
-                                server.login(smtp_username, smtp_password)
-                                server.send_message(msg)
-                        else:
-                            # Use SMTP with STARTTLS for port 587
-                            with smtplib.SMTP(smtp_server, port, timeout=connection_timeout) as server:
-                                server.set_debuglevel(0)  # Set to 1 for debug output
-                                server.starttls()
-                                server.login(smtp_username, smtp_password)
-                                server.send_message(msg)
-                        
-                        success_msg = f"[2FA Email] ✓ Code sent to {user_email} (ポート {port})"
-                        print(success_msg)
-                        import sys
-                        sys.stdout.flush()  # ログが即座に出力されるように
-                        return True
-                        
-                    except (socket.error, OSError) as e:
-                        # Network errors - try next port or retry
-                        last_error = e
-                        error_msg = f"[2FA Email] ポート {port} で接続エラー: {e}"
-                        print(error_msg)
-                        if port == ports_to_try[-1] and attempt < max_retries - 1:
-                            # Last port and not last attempt - wait before retry
-                            wait_time = (attempt + 1) * 2  # 2, 4, 6 seconds
-                            print(f"[2FA Email] {wait_time}秒待機してから再試行します...")
-                            time.sleep(wait_time)
-                        continue
-                        
-                    except smtplib.SMTPAuthenticationError as e:
-                        # Authentication error - don't retry
-                        raise
-                        
-                    except smtplib.SMTPException as e:
-                        # SMTP error - try next port or retry
-                        last_error = e
-                        error_msg = f"[2FA Email] ポート {port} でSMTPエラー: {e}"
-                        print(error_msg)
-                        if port == ports_to_try[-1] and attempt < max_retries - 1:
-                            wait_time = (attempt + 1) * 2
-                            print(f"[2FA Email] {wait_time}秒待機してから再試行します...")
-                            time.sleep(wait_time)
-                        continue
+            try:
+                print(f"[2FA Email] SMTP接続を試行中（ポート {port}、タイムアウト: {connection_timeout}秒）...")
+                print(f"[2FA Email] SMTP_SERVER: {smtp_server}")
+                print(f"[2FA Email] SMTP_USERNAME: {smtp_username}")
+                print(f"[2FA Email] SMTP_PASSWORD長: {len(smtp_password)}文字")
+                
+                # Port 465 uses SSL, port 587 and 2525 use STARTTLS
+                if port == 465:
+                    # Use SMTP_SSL for port 465
+                    context = ssl.create_default_context()
+                    print(f"[2FA Email] SMTP_SSL接続を試行中...")
+                    with smtplib.SMTP_SSL(smtp_server, port, timeout=connection_timeout, context=context) as server:
+                        server.set_debuglevel(0)  # Set to 1 for debug output
+                        print(f"[2FA Email] 接続成功。ログイン中...")
+                        server.login(smtp_username, smtp_password)
+                        print(f"[2FA Email] ログイン成功。メール送信中...")
+                        server.send_message(msg)
+                        print(f"[2FA Email] メール送信完了")
+                else:
+                    # Use SMTP with STARTTLS for port 587 and 2525
+                    print(f"[2FA Email] SMTP接続を試行中...")
+                    with smtplib.SMTP(smtp_server, port, timeout=connection_timeout) as server:
+                        server.set_debuglevel(0)  # Set to 1 for debug output
+                        print(f"[2FA Email] 接続成功。STARTTLSを開始...")
+                        server.starttls()
+                        print(f"[2FA Email] STARTTLS成功。ログイン中...")
+                        server.login(smtp_username, smtp_password)
+                        print(f"[2FA Email] ログイン成功。メール送信中...")
+                        server.send_message(msg)
+                        print(f"[2FA Email] メール送信完了")
+                
+                success_msg = f"[2FA Email] ✓ Code sent to {user_email} (ポート {port})"
+                print(success_msg)
+                import sys
+                sys.stdout.flush()  # ログが即座に出力されるように
+                return True
+                
+            except (socket.error, OSError) as e:
+                # Network errors - log and return False immediately
+                last_error = e
+                error_msg = f"[2FA Email] ポート {port} で接続エラー: {e}"
+                print(error_msg)
+                import sys
+                sys.stdout.flush()
+                return False
+                
+            except smtplib.SMTPAuthenticationError as e:
+                # Authentication error - log and return False (don't raise)
+                last_error = e
+                error_msg = f"[2FA Email] ポート {port} でSMTP認証エラー: {e}"
+                print(error_msg)
+                print(f"[2FA Email] ユーザー名: {smtp_username}")
+                print(f"[2FA Email] パスワード長: {len(smtp_password)}文字")
+                import sys
+                sys.stdout.flush()
+                return False
+                
+            except smtplib.SMTPException as e:
+                # SMTP error - log and return False immediately
+                last_error = e
+                error_msg = f"[2FA Email] ポート {port} でSMTPエラー: {e}"
+                print(error_msg)
+                import sys
+                sys.stdout.flush()
+                return False
             
-            # All attempts failed
-            error_msg = f"[2FA Email] ❌ すべての試行が失敗しました。最後のエラー: {last_error}"
-            print(error_msg)
-            import sys
-            sys.stdout.flush()
-            return False
+            # Should not reach here, but just in case
+            if last_error:
+                error_msg = f"[2FA Email] ❌ メール送信に失敗しました。エラー: {last_error}"
+                print(error_msg)
+                import sys
+                sys.stdout.flush()
+                return False
             
         except smtplib.SMTPAuthenticationError as e:
             # Authentication error - log but don't raise (allow user to see code in logs)

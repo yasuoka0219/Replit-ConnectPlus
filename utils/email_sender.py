@@ -65,76 +65,58 @@ def send_email(to_email, subject, html_body, text_body=None):
         import ssl
         import socket
         
-        # Try both ports if one fails (587 first, then 465)
-        ports_to_try = [smtp_port]
-        if smtp_port == 587:
-            ports_to_try.append(465)
-        elif smtp_port == 465:
-            ports_to_try.append(587)
+        # タイムアウトを5秒に短縮し、リトライを削減（Gunicornワーカータイムアウトを避けるため）
+        connection_timeout = 5  # タイムアウトを5秒に短縮（Railwayの制限を考慮）
         
+        # 最初のポートのみ試行（フォールバックを削除してタイムアウトを避ける）
+        port = smtp_port
         last_error = None
-        max_retries = 2  # リトライ回数を減らす（タイムアウトを避けるため）
-        connection_timeout = 10  # タイムアウトを10秒に短縮（Railwayの制限を考慮）
         
-        for attempt in range(max_retries):
-            for port in ports_to_try:
-                try:
-                    print(f"[Email] 試行 {attempt + 1}/{max_retries}: ポート {port} で接続中...")
-                    
-                    # Port 465 uses SSL, port 587 uses STARTTLS
-                    if port == 465:
-                        # Use SMTP_SSL for port 465
-                        context = ssl.create_default_context()
-                        with smtplib.SMTP_SSL(smtp_server, port, timeout=connection_timeout, context=context) as server:
-                            server.set_debuglevel(0)  # デバッグ情報を非表示（必要に応じて1に変更）
-                            server.login(smtp_username, smtp_password)
-                            server.send_message(msg)
-                    else:
-                        # Use SMTP with STARTTLS for port 587
-                        with smtplib.SMTP(smtp_server, port, timeout=connection_timeout) as server:
-                            server.set_debuglevel(0)  # デバッグ情報を非表示（必要に応じて1に変更）
-                            server.starttls()
-                            server.login(smtp_username, smtp_password)
-                            server.send_message(msg)
-                    
-                    print(f"[Email] ✓ メール送信成功: {to_email} (ポート {port})")
-                    import sys
-                    sys.stdout.flush()
-                    return True
-                    
-                except (socket.error, OSError) as e:
-                    # Network errors - try next port or retry
-                    last_error = e
-                    error_msg = f"[Email] ポート {port} で接続エラー: {e}"
-                    print(error_msg)
-                    if port == ports_to_try[-1] and attempt < max_retries - 1:
-                        wait_time = (attempt + 1) * 2
-                        print(f"[Email] {wait_time}秒待機してから再試行します...")
-                        time.sleep(wait_time)
-                    continue
-                    
-                except smtplib.SMTPAuthenticationError as e:
-                    # Authentication error - don't retry
-                    raise
-                    
-                except smtplib.SMTPException as e:
-                    # SMTP error - try next port or retry
-                    last_error = e
-                    error_msg = f"[Email] ポート {port} でSMTPエラー: {e}"
-                    print(error_msg)
-                    if port == ports_to_try[-1] and attempt < max_retries - 1:
-                        wait_time = (attempt + 1) * 2
-                        print(f"[Email] {wait_time}秒待機してから再試行します...")
-                        time.sleep(wait_time)
-                    continue
-        
-        # All attempts failed
-        raise Exception(f"すべての試行が失敗しました。最後のエラー: {last_error}")
-        
-        print(f"[Email] ✓ メール送信成功: {to_email}")
-        import sys
-        sys.stdout.flush()  # ログが即座に出力されるように
-        return True
+        try:
+            print(f"[Email] ポート {port} で接続中（タイムアウト: {connection_timeout}秒）...")
+            
+            # Port 465 uses SSL, port 587 uses STARTTLS
+            if port == 465:
+                # Use SMTP_SSL for port 465
+                context = ssl.create_default_context()
+                with smtplib.SMTP_SSL(smtp_server, port, timeout=connection_timeout, context=context) as server:
+                    server.set_debuglevel(0)  # デバッグ情報を非表示（必要に応じて1に変更）
+                    server.login(smtp_username, smtp_password)
+                    server.send_message(msg)
+            else:
+                # Use SMTP with STARTTLS for port 587
+                with smtplib.SMTP(smtp_server, port, timeout=connection_timeout) as server:
+                    server.set_debuglevel(0)  # デバッグ情報を非表示（必要に応じて1に変更）
+                    server.starttls()
+                    server.login(smtp_username, smtp_password)
+                    server.send_message(msg)
+            
+            print(f"[Email] ✓ メール送信成功: {to_email} (ポート {port})")
+            import sys
+            sys.stdout.flush()
+            return True
+            
+        except (socket.error, OSError) as e:
+            # Network errors - log and return False immediately
+            last_error = e
+            error_msg = f"[Email] ポート {port} で接続エラー: {e}"
+            print(error_msg)
+            import sys
+            sys.stdout.flush()
+            raise Exception(f"メール送信に失敗しました。エラー: {last_error}")
+            
+        except smtplib.SMTPAuthenticationError as e:
+            # Authentication error - don't retry
+            raise
+            
+        except smtplib.SMTPException as e:
+            # SMTP error - log and raise immediately
+            last_error = e
+            error_msg = f"[Email] ポート {port} でSMTPエラー: {e}"
+            print(error_msg)
+            import sys
+            sys.stdout.flush()
+            raise Exception(f"メール送信に失敗しました。エラー: {last_error}")
         
     except smtplib.SMTPAuthenticationError as e:
         error_msg = f"[Email] ❌ SMTP認証エラー: {e}"
