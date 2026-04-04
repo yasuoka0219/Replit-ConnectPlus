@@ -1,6 +1,6 @@
 import os
 from functools import wraps
-from flask import Flask, render_template, redirect, url_for, flash, request, jsonify, send_file, make_response
+from flask import Flask, render_template, redirect, url_for, flash, request, jsonify, send_file, make_response, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_wtf.csrf import CSRFProtect
 from flask_migrate import Migrate
@@ -3601,6 +3601,256 @@ def api_dashboard_kpis():
         'new_leads_last': last_new_leads_count,
         'new_leads_growth': round(new_leads_growth, 1)
     })
+
+
+@app.route('/api/dashboard-kpi-details')
+@login_required
+def api_dashboard_kpi_details():
+    """Return detail lists for KPI cards in dashboard"""
+    from datetime import date, datetime
+    from dateutil.relativedelta import relativedelta
+
+    metric = (request.args.get('metric') or '').strip()
+    period = (request.args.get('period') or 'current_month').strip()
+
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+
+    period_label_map = {
+        'current_month': '今月',
+        'last_month': '先月',
+        'current_year': '今年',
+        'custom': 'カスタム期間'
+    }
+
+    won_statuses = ['WON', '受注', '成約']
+    lost_statuses = ['LOST', '失注']
+    open_statuses = ['OPEN', '進行中']
+
+    def status_to_jp(status: str) -> str:
+        if status in ('OPEN', '進行中'):
+            return '進行中'
+        if status in ('WON', '受注', '成約'):
+            return '受注'
+        if status in ('LOST', '失注'):
+            return '失注'
+        return status or '-'
+
+    try:
+        today = date.today()
+
+        # Calculate date ranges for created_at / activities-like filters
+        if period == 'current_month':
+            current_period_start = date(today.year, today.month, 1)
+            current_period_end = today
+        elif period == 'last_month':
+            current_period_start = date(today.year, today.month, 1) - relativedelta(months=1)
+            current_period_end = date(today.year, today.month, 1) - relativedelta(days=1)
+        elif period == 'current_year':
+            current_period_start = date(today.year, 1, 1)
+            current_period_end = today
+        elif period == 'custom':
+            # Custom period from query parameters with validation
+            if start_date_str and end_date_str:
+                current_period_start = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+                current_period_end = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+                if current_period_start > current_period_end:
+                    current_period_start, current_period_end = current_period_end, current_period_start
+            else:
+                current_period_start = date(today.year, today.month, 1)
+                current_period_end = today
+        else:
+            current_period_start = date(today.year, today.month, 1)
+            current_period_end = today
+
+        # Revenue month boundaries for revenue_month filtering
+        if period in ['current_month', 'last_month']:
+            current_revenue_month = current_period_start.strftime('%Y-%m')
+            revenue_month_exact = current_revenue_month
+            revenue_month_start = None
+            revenue_month_end = None
+        elif period == 'current_year':
+            current_revenue_month_start = f'{current_period_start.year}-01'
+            current_revenue_month_end = current_period_end.strftime('%Y-%m')
+            revenue_month_start = current_revenue_month_start
+            revenue_month_end = current_revenue_month_end
+            revenue_month_exact = None
+        else:
+            revenue_month_start = current_period_start.strftime('%Y-%m')
+            revenue_month_end = current_period_end.strftime('%Y-%m')
+            revenue_month_exact = None
+
+        def deal_to_dict(deal: Deal):
+            return {
+                'deal_id': deal.id,
+                'title': deal.title,
+                'company_name': deal.company.name if getattr(deal, 'company', None) else '',
+                'amount': float(deal.amount or 0),
+                'stage': deal.stage,
+                'status': deal.status,
+                'status_label': status_to_jp(deal.status),
+                'created_at': deal.created_at.isoformat() if deal.created_at else None,
+                'closed_at': deal.closed_at.isoformat() if deal.closed_at else None,
+                'won_date': deal.won_date.isoformat() if deal.won_date else None,
+                'lost_date': deal.lost_date.isoformat() if deal.lost_date else None,
+                'revenue_month': deal.revenue_month
+            }
+
+        def revenue_month_range_filter(start_val, end_val):
+            return db.and_(Deal.revenue_month >= start_val, Deal.revenue_month <= end_val)
+
+        if metric == 'revenue':
+            if revenue_month_exact:
+                revenue_filter = db.and_(
+                    Deal.status.in_(won_statuses),
+                    Deal.revenue_month == revenue_month_exact
+                )
+            else:
+                revenue_filter = db.and_(
+                    Deal.status.in_(won_statuses),
+                    revenue_month_range_filter(revenue_month_start, revenue_month_end)
+                )
+
+            total_amount = db.session.query(db.func.coalesce(db.func.sum(Deal.amount), 0)).filter(revenue_filter).scalar() or 0
+            count = Deal.query.filter(revenue_filter).count()
+
+            deals = (Deal.query.join(Company, Deal.company_id == Company.id)
+                     .filter(revenue_filter)
+                     .order_by(Deal.amount.desc())
+                     .limit(10)
+                     .all())
+
+            return jsonify({
+                'success': True,
+                'metric': metric,
+                'period_label': period_label_map.get(period, period),
+                'period': {'start': current_period_start.isoformat(), 'end': current_period_end.isoformat()},
+                'total_amount': float(total_amount),
+                'count': int(count),
+                'deals': [deal_to_dict(d) for d in deals]
+            })
+
+        if metric == 'pipeline':
+            if revenue_month_exact:
+                pipeline_filter = db.and_(
+                    Deal.status.in_(open_statuses),
+                    db.or_(
+                        Deal.revenue_month == revenue_month_exact,
+                        Deal.revenue_month.is_(None)
+                    )
+                )
+            else:
+                pipeline_filter = db.and_(
+                    Deal.status.in_(open_statuses),
+                    db.or_(
+                        revenue_month_range_filter(revenue_month_start, revenue_month_end),
+                        Deal.revenue_month.is_(None)
+                    )
+                )
+
+            total_pipeline = db.session.query(db.func.coalesce(db.func.sum(Deal.amount), 0)).filter(pipeline_filter).scalar() or 0
+            active_deals = Deal.query.filter(pipeline_filter).count()
+
+            by_stage = (db.session.query(
+                Deal.stage,
+                db.func.coalesce(db.func.sum(Deal.amount), 0).label('value')
+            ).filter(pipeline_filter)
+             .group_by(Deal.stage)
+             .order_by(db.text('value DESC'))
+             .limit(5)
+             .all())
+
+            deals = (Deal.query.join(Company, Deal.company_id == Company.id)
+                     .filter(pipeline_filter)
+                     .order_by(Deal.amount.desc())
+                     .limit(10)
+                     .all())
+
+            return jsonify({
+                'success': True,
+                'metric': metric,
+                'period_label': period_label_map.get(period, period),
+                'period': {'start': current_period_start.isoformat(), 'end': current_period_end.isoformat()},
+                'total_pipeline': float(total_pipeline),
+                'active_deals': int(active_deals),
+                'by_stage': [{'stage': stage, 'value': float(value)} for stage, value in by_stage],
+                'deals': [deal_to_dict(d) for d in deals]
+            })
+
+        if metric == 'win_rate':
+            if revenue_month_exact:
+                won_filter = db.and_(Deal.status.in_(won_statuses), Deal.revenue_month == revenue_month_exact)
+                lost_filter = db.and_(Deal.status.in_(lost_statuses), Deal.revenue_month == revenue_month_exact)
+            else:
+                won_filter = db.and_(
+                    Deal.status.in_(won_statuses),
+                    revenue_month_range_filter(revenue_month_start, revenue_month_end)
+                )
+                lost_filter = db.and_(
+                    Deal.status.in_(lost_statuses),
+                    revenue_month_range_filter(revenue_month_start, revenue_month_end)
+                )
+
+            won_count = Deal.query.filter(won_filter).count()
+            lost_count = Deal.query.filter(lost_filter).count()
+            total_closed = won_count + lost_count
+            win_rate = (won_count / total_closed * 100) if total_closed > 0 else 0
+
+            won_deals = (Deal.query.join(Company, Deal.company_id == Company.id)
+                          .filter(won_filter)
+                          .order_by(Deal.amount.desc())
+                          .limit(10)
+                          .all())
+            lost_deals = (Deal.query.join(Company, Deal.company_id == Company.id)
+                           .filter(lost_filter)
+                           .order_by(Deal.amount.desc())
+                           .limit(10)
+                           .all())
+
+            return jsonify({
+                'success': True,
+                'metric': metric,
+                'period_label': period_label_map.get(period, period),
+                'period': {'start': current_period_start.isoformat(), 'end': current_period_end.isoformat()},
+                'won_count': int(won_count),
+                'lost_count': int(lost_count),
+                'win_rate': float(win_rate),
+                'won_deals': [deal_to_dict(d) for d in won_deals],
+                'lost_deals': [deal_to_dict(d) for d in lost_deals]
+            })
+
+        if metric == 'new_leads':
+            start_dt = datetime.combine(current_period_start, datetime.min.time())
+            end_dt = datetime.combine(current_period_end, datetime.max.time())
+
+            new_leads_filter = db.and_(Deal.created_at >= start_dt, Deal.created_at <= end_dt)
+
+            count = Deal.query.filter(new_leads_filter).count()
+            deals = (Deal.query.join(Company, Deal.company_id == Company.id)
+                     .filter(new_leads_filter)
+                     .order_by(Deal.created_at.desc())
+                     .limit(10)
+                     .all())
+
+            return jsonify({
+                'success': True,
+                'metric': metric,
+                'period_label': period_label_map.get(period, period),
+                'period': {'start': current_period_start.isoformat(), 'end': current_period_end.isoformat()},
+                'count': int(count),
+                'deals': [deal_to_dict(d) for d in deals]
+            })
+
+        return jsonify({
+            'success': False,
+            'error': f'Unsupported metric: {metric}'
+        }), 400
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 @app.route('/api/dashboard/revenue-by-assignee')
 @login_required
